@@ -21,11 +21,14 @@ test("renders the complete Xuanji destiny experience", async () => {
   assert.match(html, /自动校准真太阳时/);
   assert.match(html, /出生省份/);
   assert.match(html, /出生城市/);
+  assert.match(html, /生日历法/);
+  assert.match(html, /农历/);
   assert.match(html, /四柱八字/);
   assert.match(html, /五行颜色图例/);
   assert.match(html, /紫微命盘/);
   assert.match(html, /大运走势/);
   assert.match(html, /实际起运时刻/);
+  assert.match(html, /关键转折的依据与建议/);
   assert.match(html, /心中有惑/);
   assert.match(html, /iztro\.min\.js/);
   assert.doesNotMatch(html, /codex-preview|react-loading-skeleton/);
