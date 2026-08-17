@@ -276,6 +276,20 @@ function buildLuck(pillars: string[], gender: Gender, solar: ReturnType<typeof t
     const mutagens = majorStars.filter((star) => star.mutagen).map((star) => `${star.name}化${star.mutagen}`);
     const changeStars = majorStars.filter((star) => ["七杀", "破军", "贪狼", "廉贞"].includes(star.name)).map((star) => star.name);
     const supportiveStars = majorStars.filter((star) => ["紫微", "天府", "天相", "天梁", "武曲"].includes(star.name)).map((star) => star.name);
+    const relationshipStars = majorStars.filter((star) => ["天机", "太阴", "天同", "廉贞", "贪狼", "巨门"].includes(star.name)).map((star) => star.name);
+    const fortuneGod = tenGod(analysis.dayStem, pillar[0]);
+    const dayBranch = analysis.natalBranches[2];
+    const dayBranchClash = Boolean(dayBranch && branchClashes[pillar[1]] === dayBranch);
+    const dayBranchHarmony = Boolean(dayBranch && branchHarmonies[pillar[1]] === dayBranch);
+    const spouseGods = gender === "男" ? ["正财", "偏财"] : ["正官", "七杀"];
+    const careerGodWeights: Record<string, number> = { 正官: 4, 七杀: 4, 食神: 2.5, 伤官: 2.5, 正印: 2, 偏印: 2, 正财: 1.5, 偏财: 1.5, 比肩: 1, 劫财: 1 };
+    const careerGodMeanings: Record<string, string> = {
+      正官: "正官透出，职位、责任与组织标准更容易成为主线", 七杀: "七杀透出，竞争、高压任务与快速决策增多",
+      食神: "食神透出，专业产出、作品与口碑更容易兑现", 伤官: "伤官透出，创新、表达与职业换轨的需求增强",
+      正印: "正印透出，学习、资质、平台与贵人资源成为关键", 偏印: "偏印透出，方法更新、专门技能与非标准路径值得重视",
+      正财: "正财透出，收入结构、客户与稳定回报成为重点", 偏财: "偏财透出，市场机会、资源整合与多元收入更活跃",
+      比肩: "比肩透出，同行协作与职业自主性同时上升", 劫财: "劫财透出，团队重组、合伙分配与同行竞争需要说清",
+    };
     let quality = 0;
     if (analysis.favorable.includes(stemElement)) quality += 2;
     if (analysis.favorable.includes(branchElement)) quality += 1;
@@ -288,12 +302,33 @@ function buildLuck(pillars: string[], gender: Gender, solar: ReturnType<typeof t
     const turnScore = clashes.length * 4 + harmonies.length * 1.5 + changeStars.length * 2 + mutagens.length * 2
       + (decadalPalace && ["命宫", "官禄", "财帛", "夫妻", "迁移"].some((name) => decadalPalace.name.includes(name)) ? 1 : 0)
       + (Math.abs(quality) >= 2 ? 1 : 0);
+    const careerTurnScore = (careerGodWeights[fortuneGod] || 0) + clashes.length * 2 + changeStars.length * 1.5 + mutagens.length * 2
+      + (decadalPalace?.name.includes("官禄") ? 5 : decadalPalace && ["命宫", "迁移", "财帛"].some((name) => decadalPalace.name.includes(name)) ? 2 : 0)
+      + (Math.abs(quality) >= 2 ? 1 : 0);
+    const relationshipTurnScore = (spouseGods.includes(fortuneGod) ? 4 : 0) + (dayBranchClash ? 5 : 0) + (dayBranchHarmony ? 4 : 0)
+      + harmonies.length + relationshipStars.length * 1.5 + mutagens.length * 2
+      + (decadalPalace?.name.includes("夫妻") ? 5 : decadalPalace && ["命宫", "福德", "迁移"].some((name) => decadalPalace.name.includes(name)) ? 2 : 0);
     const turnReasons = [
       clashes.length ? `大运${pillar[1]}冲原局${clashes.join("、")}，环境或角色更容易发生实质变动` : "",
       harmonies.length ? `大运${pillar[1]}与原局${harmonies.join("、")}六合，合作与关系会成为推动力` : "",
       decadalPalace ? `紫微大限落${decadalPalace.name}（${palaceStars(decadalPalace)}）` : "",
       changeStars.length ? `${changeStars.join("、")}加强重整、换轨或突破的倾向` : "",
       mutagens.length ? `大限见${mutagens.join("、")}` : "",
+    ].filter(Boolean);
+    const careerReasons = [
+      careerGodMeanings[fortuneGod] || "",
+      decadalPalace && ["官禄", "命宫", "迁移", "财帛"].some((name) => decadalPalace.name.includes(name)) ? `紫微大限走${decadalPalace.name}（${palaceStars(decadalPalace)}），职业角色与资源配置会被放大` : "",
+      clashes.length ? `大运${pillar[1]}冲原局${clashes.join("、")}，工作环境或责任边界容易变动` : "",
+      changeStars.length ? `${changeStars.join("、")}使转岗、重组或突破之意更强` : "",
+      mutagens.length ? `事业判断同时参看${mutagens.join("、")}` : "",
+    ].filter(Boolean);
+    const relationshipReasons = [
+      dayBranchClash ? `大运${pillar[1]}冲日支${dayBranch}，亲密关系的相处结构与生活节奏容易重新调整` : "",
+      dayBranchHarmony ? `大运${pillar[1]}合日支${dayBranch}，关系确认、合作或共同生活议题更容易被推动` : "",
+      spouseGods.includes(fortuneGod) ? `大运天干${pillar[0]}为${fortuneGod}，伴侣与承诺议题进入显位` : "",
+      decadalPalace && ["夫妻", "命宫", "福德", "迁移"].some((name) => decadalPalace.name.includes(name)) ? `紫微大限走${decadalPalace.name}（${palaceStars(decadalPalace)}），情感需求或现实环境对关系的影响加深` : "",
+      relationshipStars.length ? `${relationshipStars.join("、")}使情绪表达、吸引力或协商议题更明显` : "",
+      mutagens.length ? `关系判断同时参看${mutagens.join("、")}` : "",
     ].filter(Boolean);
     return {
       pillar,
@@ -306,17 +341,30 @@ function buildLuck(pillars: string[], gender: Gender, solar: ReturnType<typeof t
       quality,
       turnScore,
       turnReasons,
+      careerTurnScore,
+      careerReasons,
+      relationshipTurnScore,
+      relationshipReasons,
+      careerAdvice: mode === "进取" ? `可主动争取职位、客户或新赛道，但先用${labels[analysis.favorable[0]]}设定阶段验收点。` : mode === "蓄势" ? "先稳住现金流、职责边界和核心能力，不宜因一时压力裸辞或重仓转轨。" : "先以项目、兼职或小范围试点验证新方向，达到量化标准后再加码。",
+      relationshipAdvice: dayBranchClash ? "先处理生活节奏、距离、金钱与边界的重新协商，不在情绪最高点做终局决定。" : dayBranchHarmony ? "适合推进关系确认与共同计划，但要把承诺、金钱和个人空间说具体。" : "重点观察价值观、沟通方式和日常节奏是否经得住现实验证，不用进度代替质量。",
       decadalPalace: decadalPalace?.name || "未落入当前大限范围",
       decadalStars: palaceStars(decadalPalace),
     };
   });
-  const turningIndexes = [...draftFortunes]
-    .map((fortune, index) => ({ index, score: fortune.turnScore }))
+  const topIndexes = (scoreOf: (fortune: (typeof draftFortunes)[number]) => number) => [...draftFortunes]
+    .map((fortune, index) => ({ index, score: scoreOf(fortune) }))
     .sort((a, b) => b.score - a.score || a.index - b.index)
     .slice(0, 2)
-    .filter((item, index, all) => item.score > 1 || (index === 0 && all.length > 0))
     .map((item) => item.index);
-  const fortunes = draftFortunes.map((fortune, index) => ({ ...fortune, isTurningPoint: turningIndexes.includes(index) }));
+  const turningIndexes = topIndexes((fortune) => fortune.turnScore);
+  const careerTurningIndexes = topIndexes((fortune) => fortune.careerTurnScore);
+  const relationshipTurningIndexes = topIndexes((fortune) => fortune.relationshipTurnScore);
+  const fortunes = draftFortunes.map((fortune, index) => ({
+    ...fortune,
+    isTurningPoint: turningIndexes.includes(index),
+    isCareerTurningPoint: careerTurningIndexes.includes(index),
+    isRelationshipTurningPoint: relationshipTurningIndexes.includes(index),
+  }));
   const currentYear = new Date().getFullYear();
   const currentFortune = fortunes.find((_, index) => currentYear >= startYear + index * 10 && currentYear <= startYear + index * 10 + 9) || fortunes[0];
   return {
@@ -621,6 +669,13 @@ export default function Home() {
   const lifeReadings = useMemo(() => buildLifeReadings(analysis, chart, submitted.gender), [analysis, chart, submitted.gender]);
   const patternInsight = useMemo(() => buildPatternInsight(analysis), [analysis]);
   const turningFortunes = fortunes.filter((fortune) => fortune.isTurningPoint);
+  const careerTurningFortunes = fortunes.filter((fortune) => fortune.isCareerTurningPoint);
+  const relationshipTurningFortunes = fortunes.filter((fortune) => fortune.isRelationshipTurningPoint);
+  const turningGroups = [
+    { key: "overall", symbol: "全", title: "全盘关键转折", description: "看人生环境、角色与整体节奏的强变化。", items: turningFortunes },
+    { key: "career", symbol: "业", title: "事业关键转折", description: "重点看职位、赛道、责任边界和收入结构的换挡。", items: careerTurningFortunes },
+    { key: "relationship", symbol: "情", title: "感情关键转折", description: "重点看关系确认、相处结构、承诺与共同生活的变化。", items: relationshipTurningFortunes },
+  ] as const;
   const progressFortunes = fortunes.filter((fortune) => fortune.mode === "进取");
   const cautiousFortunes = fortunes.filter((fortune) => fortune.mode === "蓄势");
 
@@ -790,6 +845,11 @@ export default function Home() {
             <p>日主得令与否，要同时看月令、通根、透干和全局制化。此盘扶身力量约占 {Math.round(analysis.ratio * 100)}%，{analysis.strength === "身弱" ? "宜先补足承载力，再担财官。" : "已有承载力，宜以泄耗制衡打开格局。"}</p>
             <div className="element-bars">{analysis.normalized.map((item) => <div key={item.name}><span className={`element-${elementClass[item.name]}`}>{item.name}</span><div><i style={{ width: `${Math.max(item.value, 6)}%` }} /></div><b>{item.raw}</b></div>)}</div>
             <div className="god-row"><span>用神 <b className={`element-${elementClass[analysis.favorable[0]]}`}>{analysis.favorable[0]}</b></span><span>喜神 <b className={`element-${elementClass[analysis.favorable[1]]}`}>{analysis.favorable[1]}</b></span><span>慎用 <b>{analysis.avoid.join("、")}</b></span></div>
+            <div className="balance-insights">
+              <div><span>旺衰证据</span><strong>{analysis.dominantElement}势最显，{analysis.weakestElement}势相对较少</strong><p>扶身力量约 {Math.round(analysis.ratio * 100)}%，因此定为{analysis.strength}，后续取用先看全局能否回到平衡。</p></div>
+              <div><span>体用路径</span><strong>先用{analysis.favorable[0]}，再借{analysis.favorable[1]}</strong><p>{elementGuidance[analysis.favorable[0]].title}是主线，{elementGuidance[analysis.favorable[1]].title}用来辅助落地。</p></div>
+              <div><span>需要节制</span><strong>{analysis.avoid.join("、")}不宜再过度加码</strong><p>{analysis.interactions.length ? `原局又见${analysis.interactions.join("、")}，遇到同类大运时应多留复核窗口。` : "原局合冲信号不重，更适合用稳定节律而非剧烈调整。"}</p></div>
+            </div>
           </article>
           <article className="pattern-card">
             <div className="article-title compact"><span>02</span><div><small>十神关系</small><h3>看见行为模式</h3></div></div>
@@ -820,7 +880,8 @@ export default function Home() {
         <div className="fortune-legend"><span><i className="dot progress" />适合进取</span><span><i className="dot steady" />稳中求进</span><span><i className="dot pause" />蓄势调整</span></div>
         <div className="timeline">
           {fortunes.map((fortune) => <div className={`fortune-node ${fortune.mode === "进取" ? "progress" : fortune.mode === "蓄势" ? "pause" : "steady"}`} key={fortune.pillar}>
-            <span className="node-age">{Math.floor(fortune.age)}<small>岁</small></span><i /><strong>{fortune.pillar}</strong><small>{fortune.ageText}<br />{fortune.years}</small><b>{fortune.mode}</b>{fortune.isTurningPoint && <em>关键转折</em>}
+            <span className="node-age">{Math.floor(fortune.age)}<small>岁</small></span><i /><strong>{fortune.pillar}</strong><small>{fortune.ageText}<br />{fortune.years}</small><b>{fortune.mode}</b>
+            {(fortune.isTurningPoint || fortune.isCareerTurningPoint || fortune.isRelationshipTurningPoint) && <div className="turn-tags">{fortune.isTurningPoint && <em>全盘</em>}{fortune.isCareerTurningPoint && <em>事业</em>}{fortune.isRelationshipTurningPoint && <em>感情</em>}</div>}
           </div>)}
         </div>
         <div className="fortune-advice">
@@ -829,14 +890,23 @@ export default function Home() {
           <div><span>◇</span><h3>判断方式</h3><p>“进取/稳进/蓄势”由大运干支喜忌与紫微大限星曜共同给出；“关键转折”看合冲、四化和杀破狼等变化信号，不再按固定年龄贴标签。</p></div>
         </div>
         <div className="turning-detail">
-          <div><span>双盘合参</span><h3>关键转折的依据与建议</h3><p>标记表示变化强度较高，不等于必然走好运；最后仍要用现实事件验证。</p></div>
-          <section>
-            {turningFortunes.map((fortune) => <article key={`turn-${fortune.pillar}`}>
-              <div><strong>{fortune.pillar}运</strong><span>{fortune.years} · {fortune.mode}</span></div>
-              <p>{fortune.turnReasons.join("；") || `大运五行为${fortune.element}${fortune.branchElement}，与原局喜忌形成明显阶段差异。`}</p>
-              <em>{fortune.mode === "进取" ? `建议：围绕${labels[analysis.favorable[0]]}主动争取可量化的权责，但分阶段投入。` : fortune.mode === "蓄势" ? `建议：先稳现金流与关系边界，避免在变化信号最强时一次性押注。` : `建议：小步试错、季度复盘，以${fortune.decadalPalace}相关现实事件决定是否加码。`}</em>
-            </article>)}
-          </section>
+          <div><span>双盘合参 · 三类转折</span><h3>关键转折的依据与建议</h3><p>同一步大运可能同时是全盘、事业或感情的转折期；标记只表示变化信号较强，不等于必然吉凶。</p></div>
+          <div className="turning-groups">
+            {turningGroups.map((group) => <section className={`turning-group ${group.key}`} key={group.key}>
+              <header><i>{group.symbol}</i><div><span>{group.title}</span><p>{group.description}</p></div></header>
+              <div className="turning-cards">
+                {group.items.map((fortune) => {
+                  const reasons = group.key === "career" ? fortune.careerReasons : group.key === "relationship" ? fortune.relationshipReasons : fortune.turnReasons;
+                  const advice = group.key === "career" ? fortune.careerAdvice : group.key === "relationship" ? fortune.relationshipAdvice : fortune.mode === "进取" ? `围绕${labels[analysis.favorable[0]]}主动争取可量化的权责，但分阶段投入。` : fortune.mode === "蓄势" ? "先稳现金流与关系边界，避免在变化信号最强时一次性押注。" : `小步试错、季度复盘，以${fortune.decadalPalace}相关现实事件决定是否加码。`;
+                  return <article key={`${group.key}-${fortune.pillar}`}>
+                    <div><strong>{fortune.pillar}运</strong><span>{fortune.years} · {fortune.mode}</span></div>
+                    <p>{reasons.join("；") || `大运五行为${fortune.element}${fortune.branchElement}，与原局喜忌形成阶段差异。`}</p>
+                    <em>建议：{advice}</em>
+                  </article>;
+                })}
+              </div>
+            </section>)}
+          </div>
         </div>
         <p className="calculation-note">起运已按真实出生时刻、真太阳时与定气节气计算，不再统一使用固定年龄。若出生恰在节气交界前后，建议用出生证明时间复核；不同门派的早晚子时规则仍可能造成细微差异。</p>
       </section>

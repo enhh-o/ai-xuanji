@@ -30,6 +30,12 @@ test("renders the complete Xuanji destiny experience", async () => {
   assert.match(html, /大运走势/);
   assert.match(html, /实际起运时刻/);
   assert.match(html, /关键转折的依据与建议/);
+  assert.match(html, /旺衰证据/);
+  assert.match(html, /体用路径/);
+  assert.match(html, /需要节制/);
+  assert.match(html, /全盘关键转折/);
+  assert.match(html, /事业关键转折/);
+  assert.match(html, /感情关键转折/);
   assert.match(html, /做月度预算并保留应急金/);
   assert.match(html, /element-metal/);
   assert.match(html, /心中有惑/);
@@ -44,4 +50,14 @@ test("紫微解读包含具体三方与对宫职责", async () => {
   assert.match(source, /两个三方宫各自负责什么/);
   assert.match(source, /对宫如何触发与制衡本宫/);
   assert.match(source, /relatedPalacePurposes/);
+});
+
+test("三类关键转折分别按命盘信号计算", async () => {
+  const source = await readFile(new URL("../app/page.tsx", import.meta.url), "utf8");
+  assert.match(source, /careerTurnScore/);
+  assert.match(source, /relationshipTurnScore/);
+  assert.match(source, /isCareerTurningPoint/);
+  assert.match(source, /isRelationshipTurningPoint/);
+  assert.match(source, /dayBranchClash/);
+  assert.match(source, /spouseGods\.includes\(fortuneGod\)/);
 });
