@@ -36,6 +36,8 @@ test("renders the complete Xuanji destiny experience", async () => {
   assert.match(html, /全盘关键转折/);
   assert.match(html, /事业关键转折/);
   assert.match(html, /感情关键转折/);
+  assert.match(html, /重点年份/);
+  assert.match(html, /以立春为界/);
   assert.match(html, /做月度预算并保留应急金/);
   assert.match(html, /element-metal/);
   assert.match(html, /心中有惑/);
@@ -54,10 +56,27 @@ test("紫微解读包含具体三方与对宫职责", async () => {
 
 test("三类关键转折分别按命盘信号计算", async () => {
   const source = await readFile(new URL("../app/page.tsx", import.meta.url), "utf8");
+  const styles = await readFile(new URL("../app/globals.css", import.meta.url), "utf8");
   assert.match(source, /careerTurnScore/);
   assert.match(source, /relationshipTurnScore/);
+  assert.match(source, /yearPillar/);
+  assert.match(source, /annualSignals/);
   assert.match(source, /isCareerTurningPoint/);
   assert.match(source, /isRelationshipTurningPoint/);
   assert.match(source, /dayBranchClash/);
   assert.match(source, /spouseGods\.includes\(fortuneGod\)/);
+  assert.match(source, /className="overall"/);
+  assert.match(source, /className="career"/);
+  assert.match(source, /className="relationship"/);
+  assert.match(styles, /em\.overall/);
+  assert.match(styles, /em\.career/);
+  assert.match(styles, /em\.relationship/);
+  assert.match(styles, /\.timeline \{[^}]*overflow: visible/);
+  assert.doesNotMatch(styles, /\.timeline \{[^}]*overflow-x:/);
+});
+
+test("判词避免夸张与恭维式话术", async () => {
+  const source = await readFile(new URL("../app/page.tsx", import.meta.url), "utf8");
+  assert.doesNotMatch(source, /优势容易被别人看见|机会可见|关系机会不弱|贵人资源成为关键/);
+  assert.match(source, /仍要用经历、能力与现实条件核实/);
 });
