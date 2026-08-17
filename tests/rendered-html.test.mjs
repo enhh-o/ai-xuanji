@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
 import test from "node:test";
 
 async function render() {
@@ -29,7 +30,18 @@ test("renders the complete Xuanji destiny experience", async () => {
   assert.match(html, /大运走势/);
   assert.match(html, /实际起运时刻/);
   assert.match(html, /关键转折的依据与建议/);
+  assert.match(html, /做月度预算并保留应急金/);
+  assert.match(html, /element-metal/);
   assert.match(html, /心中有惑/);
   assert.match(html, /iztro\.min\.js/);
+  assert.doesNotMatch(html, /而不是套用同一套性格结论/);
+  assert.doesNotMatch(html, /约\d+(?:\.\d+)?处/);
   assert.doesNotMatch(html, /codex-preview|react-loading-skeleton/);
+});
+
+test("紫微解读包含具体三方与对宫职责", async () => {
+  const source = await readFile(new URL("../app/page.tsx", import.meta.url), "utf8");
+  assert.match(source, /两个三方宫各自负责什么/);
+  assert.match(source, /对宫如何触发与制衡本宫/);
+  assert.match(source, /relatedPalacePurposes/);
 });

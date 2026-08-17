@@ -76,6 +76,13 @@ const produces: Record<ElementName, ElementName> = { 木: "火", 火: "土", 土
 const controls: Record<ElementName, ElementName> = { 木: "土", 火: "金", 土: "水", 金: "木", 水: "火" };
 const labels: Record<ElementName, string> = { 木: "生发与规划", 火: "表达与行动", 土: "承载与秩序", 金: "决断与规则", 水: "洞察与流动" };
 const elementClass: Record<ElementName, string> = { 木: "wood", 火: "fire", 土: "earth", 金: "metal", 水: "water" };
+const elementGuidance: Record<ElementName, { title: string; steps: [string, string, string] }> = {
+  木: { title: "把成长变成路径", steps: ["制定90天学习或项目计划", "每周联系一位能交换信息的同行", "优先接有成长空间的任务" ] },
+  火: { title: "让能力被看见", steps: ["每周至少做一次公开输出或成果汇报", "把重要请求当面说清而不只等对方猜", "用规律运动保持稳定行动力" ] },
+  土: { title: "先稳住承载力", steps: ["做月度预算并保留应急金", "固定睡眠、饮食和复盘时间", "把反复任务写成清单和交付流程" ] },
+  金: { title: "用规则减少内耗", steps: ["重要合作先写清责任、价格和截止日期", "用数据指标取代凭感觉反复摇摆", "每周删掉一项低价值承诺" ] },
+  水: { title: "先获得信息与余地", steps: ["重大决定前安排一轮调研和反方验证", "预留现金和时间缓冲而不满负荷", "通过跨圈层或异地渠道补充新信息" ] },
+};
 const hiddenStem: Record<string, string> = { 子: "癸", 丑: "己癸辛", 寅: "甲丙戊", 卯: "乙", 辰: "戊乙癸", 巳: "丙戊庚", 午: "丁己", 未: "己丁乙", 申: "庚壬戊", 酉: "辛", 戌: "戊辛丁", 亥: "壬甲" };
 const stems = "甲乙丙丁戊己庚辛壬癸".split("");
 const branches = "子丑寅卯辰巳午未申酉戌亥".split("");
@@ -155,6 +162,7 @@ function buildAnalysis(pillars: string[]) {
   const tenGods = pillars.map((pillar, index) => ({
     label: ["年柱", "月柱", "日柱", "时柱"][index],
     god: index === 2 ? "日主" : tenGod(dayStem, pillar[0]),
+    element: elementOf[pillar[0]] || dayElement,
     hidden: hiddenStem[pillar[1]] || "—",
   }));
   const godCounts: Record<string, number> = {};
@@ -363,6 +371,60 @@ const starMeanings: Record<string, string> = {
   七杀: "决断快，适合在压力中突破", 破军: "敢于重构旧秩序，人生转折感较强",
 };
 
+const starWatchouts: Record<string, string> = {
+  紫微: "不必事事控场或把责任全揽在自己身上", 天机: "决策时要设截止点，免得反复推演却不落地",
+  太阳: "别为了维持表现而透支精力", 武曲: "不要只用效率和数字衡量人情与长期价值",
+  天同: "安逸时要为自己设稍有挑战的节点", 廉贞: "野心与边界要同时说清，避免陷入关系拉扯",
+  天府: "守成要有止损线，不必为沉没成本继续加码", 太阴: "安全感不足时要用信息核实，不要靠内心猜测",
+  贪狼: "选择过多时要定一个主线，免得新鲜感稀释积累", 巨门: "表达要对事不对人，重要结论最好留下书面记录",
+  天相: "协调他人时也要保留自己的判断，别只求体面", 天梁: "原则很重要，但不必以教导姿态代替协商",
+  七杀: "动作越快越要设风险上限和退路", 破军: "破旧之前先留住现金流、核心关系和可迁移能力",
+};
+
+const starPairMeanings: Record<string, string> = {
+  "天府紫微": "紫微的统筹与天府的守成同在，优势是能建立秩序，但也容易因追求周全而放慢决策",
+  "天机太阴": "天机的推演配合太阴的细腻，擅长预判与布局，但不确定时会反复求证",
+  "巨门天相": "巨门负责辨析，天相负责衡平，适合处理复杂协商，关键是将判断依据说清",
+  "廉贞破军": "廉贞定边界、破军做重构，改革力强，但不宜在利益和规则没说清前贸然推翻重来",
+};
+
+const relatedPalacePurposes: Record<string, string> = {
+  命宫: "交代你会用什么性格和承压方式处理这件事", 官禄: "检验这个主题能否转化为职业位置、责任与长期能力",
+  财帛: "检验能力能否兑现为收入、资源和可承受的风险", 夫妻: "反映亲密关系与契约协商会怎样回应这个主题",
+  迁移: "说明外部环境、异地与变化会如何放大此事", 福德: "揭示内在欲望、压力恢复和长期动机能否支撑下去",
+  田宅: "检验居住、家庭与长期资产能否提供稳定根基", 交友: "说明团队、合作伙伴与人际资源能给多少支援",
+  父母: "说明长辈、制度与专业资源会给什么支持或约束", 子女: "看创造力、作品与长期项目怎样承接这个主题",
+  兄弟: "检验同辈之间的分工、竞争与资源分配", 疾厄: "提醒体力、情绪与日常节律是否承受得住",
+};
+
+const palaceElementActions: Record<ElementName, Record<string, string>> = {
+  木: {
+    命宫: "给未来一年定一条成长主线，把学习拆成每周进度", 官禄: "优先选学习曲线和晋升路径清晰的工作，并稳定积累行业人脉",
+    财帛: "把一部分收入投到能复用的技能和长期项目中", 夫妻: "和伴侣共同制定一个可成长的目标，用共同行动代替催促对方",
+    迁移: "变动前先确认新环境能带来的学习、人脉和发展空间", 福德: "保留阅读、写作或观察自然的时间，让精神有稳定生长感",
+  },
+  火: {
+    命宫: "练习在重要场合清楚表达立场，不让真实需求被隐藏", 官禄: "每周做一次成果汇报或公开输出，让专业能力能被决策者看见",
+    财帛: "用内容、展示或销售测试扩大收入渠道，但每次先设成本上限", 夫妻: "在情绪升高前直接说出感受与请求，不用冷处理等对方猜",
+    迁移: "到新环境后主动介绍自己、展示作品，迅速建立第一批有效连接", 福德: "用规律运动、日照和适量社交恢复精力，避免长期闷在内心",
+  },
+  土: {
+    命宫: "先固定作息和复盘时间，再处理高压决定", 官禄: "把每个项目拆成交付清单、节点和验收标准",
+    财帛: "做月度预算、区分生活与投资账户，并保留应急金", 夫妻: "把家务、金钱、陪伴时间和个人空间约定成双方能执行的节奏",
+    迁移: "换城市、换岗位前先落实住行、收入和三个月缓冲资金", 福德: "固定睡眠、进餐和独处时间，先让身体恢复稳定感",
+  },
+  金: {
+    命宫: "为重要决策设三条标准和一个截止日期，到点即做取舍", 官禄: "用合同、职责边界和量化指标说清你要负责什么、不负责什么",
+    财帛: "为每类资产设上限、止损和复盘日，不因短期涨跌临时改规则", 夫妻: "明确承诺、金钱和边界，并约定冲突时不讽刺、不失联的底线",
+    迁移: "为变动设启动条件、备选方案和撤退线，不在信息不全时孤注一掷", 福德: "每周删掉一项低价值承诺或无效信息输入，给大脑留出空白",
+  },
+  水: {
+    命宫: "重大选择前先做调研和反方验证，同时保留可回头的余地", 官禄: "主动获取跨部门、跨行业或异地信息，用信息差改进职业选择",
+    财帛: "优先保留现金流和流动性，不把所有资金锁在同一处", 夫妻: "先听完对方的真实需求再回应，对不确定的部分直接提问核实",
+    迁移: "先短住、实地调研或试运行，验证新环境后再扩大投入", 福德: "保留无打扰的独处、写作或冥想时间，让情绪有流动和沉淀的空间",
+  },
+};
+
 const palaceActions: Record<string, string> = {
   命宫: "把它当作你的默认反应模式，而非无法改变的性格标签。",
   官禄: "事业选择优先看职责结构、成长空间与可沉淀的能力，不只看职位名称。",
@@ -399,43 +461,73 @@ function relatedPalaces(chart: Astrolabe, palace?: Palace) {
   return { triads: [find(4), find(8)].filter(Boolean) as Palace[], opposite: find(6) };
 }
 
-function brightnessText(palace?: Palace) {
+function brightnessText(palace: Palace | undefined, target: string) {
   const bright = palace?.majorStars.filter((star) => ["庙", "旺", "得", "利"].includes(star.brightness || "")).length || 0;
   const dim = palace?.majorStars.filter((star) => ["陷", "不"].includes(star.brightness || "")).length || 0;
-  if (bright > dim && bright > 0) return "主星状态较能直接发挥，优势容易被外界看见";
-  if (dim > bright && dim > 0) return "主星需要经过现实磨合才能发挥，越急于证明自己越容易用力失衡";
-  return "主星强弱并不极端，成效更取决于选择的环境和后天方法";
+  if (bright > dim && bright > 0) return `这组星在${target}发挥较直接，优势容易被别人看见。`;
+  if (dim > bright && dim > 0) return `这组星在${target}需经过现实磨合，越急于证明越容易用力失衡。`;
+  return `${target}的星曜强弱不走极端，结果更看环境选择和后天方法。`;
+}
+
+function pairMeaning(stars: string[]) {
+  if (stars.length < 2) return "";
+  const key = [...stars.slice(0, 2)].sort().join("");
+  return starPairMeanings[key] || `${stars[0]}与${stars[1]}同宫，前者带来“${starMeanings[stars[0]] || "主动性"}”，后者补上“${starMeanings[stars[1]] || "现实考量"}”，两股力量要放在同一目标上才不会互相拉扯。`;
+}
+
+function mutagenText(palace?: Palace) {
+  const meanings: Record<string, string> = { 禄: "资源与机会增加", 权: "主导权与责任同时增加", 科: "专业认可与名声更显", 忌: "执念、反复或卡点需要特别处理" };
+  return palace?.majorStars.filter((star) => star.mutagen).map((star) => `${star.name}化${star.mutagen}，${meanings[star.mutagen || ""] || "该星的作用被放大"}。`).join("") || "";
+}
+
+function compactPalaceSignal(palace: Palace) {
+  const names = palace.majorStars.filter((star) => star.name).map((star) => star.name);
+  if (!names.length) return "本宫无十四主星，这项作用要借对宫星曜来定调。";
+  const traits = names.slice(0, 2).map((name) => starMeanings[name]).filter(Boolean).join("；");
+  return `${names.slice(0, 2).join("、")}让这一环节表现为：${traits}。`;
 }
 
 function buildZiweiReading(chart: Astrolabe, analysis: ReturnType<typeof buildAnalysis>) {
   const targetNames = ["命宫", "官禄", "财帛", "夫妻", "迁移", "福德"];
+  const oppositionTests: Record<string, string> = {
+    命宫: "外部环境是真能给你发挥空间，还是只激发一时冲动",
+    官禄: "亲密关系、合作契约与职业责任能否并行",
+    财帛: "赚钱方式是否真能支持你想要的生活与安心感",
+    夫妻: "工作投入和现实责任是否正在挤压关系空间",
+    迁移: "外部机会是否符合你的真实意愿与承受方式",
+    福德: "收入、消费与风险压力是否能换来真正的稳定感",
+  };
   const cards = targetNames.map((target) => {
     const palace = palaceByName(chart, target);
     const major = palace?.majorStars?.filter((star) => star.name).slice(0, 3) || [];
     const starNames = major.map((star) => star.name);
-    const explanations = starNames.map((name) => starMeanings[name]).filter(Boolean);
     const brightness = major.map((star) => `${star.name}${star.brightness ? `·${star.brightness}` : ""}${star.mutagen ? `·化${star.mutagen}` : ""}`).join(" / ");
     const support = [...(palace?.minorStars || []), ...(palace?.adjectiveStars || [])].slice(0, 4).map((star) => star.name).join("、");
     const related = relatedPalaces(chart, palace);
-    const triadText = related.triads.map((item) => `${item.name}（${palaceStars(item)}）`).join("；") || "三方宫位资料不足";
     const oppositeText = related.opposite ? `${related.opposite.name}（${palaceStars(related.opposite)}）` : "对宫资料不足";
-    const emptyBorrow = major.length === 0 && related.opposite ? `本宫无十四主星，重点借对宫${oppositeText}立意，并看三方是否承接。` : "";
+    const starDetails = major.slice(0, 2).map((star) => `${star.name}${star.brightness ? `为${star.brightness}` : ""}：${starMeanings[star.name] || "作用要结合同宫星曜判断"}；需留意${starWatchouts[star.name] || "优势使用过度"}。`).join("");
+    const triadText = related.triads.map((item, index) => `${index + 1}．${item.name}（${palaceStars(item)}）：${relatedPalacePurposes[item.name] || palaceRoles[item.name] || "从另一个现实层面支援本宫"}。${compactPalaceSignal(item)}`).join(" ") || "三方宫位资料不足，暂不做延伸。";
+    const emptyBorrow = major.length === 0 && related.opposite ? `本宫无十四主星，应先借${oppositeText}定主调，再看两个三方宫能不能把它落到现实。` : "";
+    const combinedMeaning = pairMeaning(starNames);
+    const core = major.length
+      ? `${palaceRoles[target]}。${starDetails}${combinedMeaning}${combinedMeaning ? "。" : ""}${mutagenText(palace)}${brightnessText(palace, target)}`
+      : `${palaceRoles[target]}。${emptyBorrow}空宫不等于这个领域薄弱，重点是对宫的星曜要如何借来用。`;
     return {
       name: target,
       branch: palace ? `${palace.heavenlyStem}${palace.earthlyBranch}` : "—",
       stars: brightness || "空宫借对宫参看",
       support: support || "辅曜信息平稳",
-      core: `${palaceRoles[target]}。${emptyBorrow}${explanations.length ? `${starNames.join("、")}组合显示：${explanations.join("；")}；${brightnessText(palace)}。` : "不能只因空宫就断作薄弱或无缘。"}`,
-      triad: `三方宫位是${triadText}。它们不是陪衬：分别补充此主题背后的个人驱动力、资源兑现方式和可持续性。`,
-      opposite: `对宫是${oppositeText}，代表外部情境、另一端需求或事件触发点；本宫想怎么做，要用对宫检验现实是否允许。`,
-      action: `${palaceActions[target]} 八字同时喜${analysis.favorable.join("、")}，可把它落实为“${labels[analysis.favorable[0]]}、${labels[analysis.favorable[1]]}”两类行动。`,
+      core,
+      triad: triadText,
+      opposite: related.opposite ? `对宫是${oppositeText}。它的作用是${relatedPalacePurposes[related.opposite.name] || "从外部条件检验本宫"}。${compactPalaceSignal(related.opposite)}两宫合看时，请重点核实：${oppositionTests[target]}。` : "本盘对宫资料不足，暂不作延伸。",
+      action: `${palaceActions[target]} 就${target}先做两件事：①以喜${analysis.favorable[0]}入手，${palaceElementActions[analysis.favorable[0]][target]}；②用喜${analysis.favorable[1]}辅助，${palaceElementActions[analysis.favorable[1]][target]}。`,
     };
   });
   const life = cards[0];
   const bodyPalace = chart.palaces.find((item) => item.isBodyPalace)?.name || "未标注";
   return {
     headline: `${chart.fiveElementsClass || "五行局"} · 命主${chart.soul || "—"} · 身主${chart.body || "—"}`,
-    overview: `命宫落${life.branch}，主星组合为${life.stars}；身宫落在${bodyPalace}。本次不是用一句“三方四正”带过：每张卡都把本宫、两个三方宫和对宫逐一列出，并说明它们如何共同影响同一主题。八字部分的${analysis.strength}与喜${analysis.favorable.join("、")}也会同步用于最终建议。`,
+    overview: `命宫落${life.branch}，主星为${life.stars}；身宫落${bodyPalace}，显示人生重心更容易投向该宫所主的现实领域。下方分别从命、官禄、财帛、夫妻、迁移与福德六个主题展开，并把${analysis.strength}、喜${analysis.favorable.join("、")}转成可执行建议。`,
     cards,
   };
 }
@@ -444,8 +536,12 @@ function godTotal(analysis: ReturnType<typeof buildAnalysis>, names: string[]) {
   return names.reduce((sum, name) => sum + (analysis.godCounts[name] || 0), 0);
 }
 
-function formatGodCount(value: number) {
-  return value % 1 === 0 ? String(value) : value.toFixed(1);
+function describeGodPresence(value: number) {
+  if (value >= 3) return "很突出";
+  if (value >= 2) return "较明显";
+  if (value >= 1) return "有一定分量";
+  if (value > 0) return "略有显现";
+  return "不显";
 }
 
 function buildLifeReadings(analysis: ReturnType<typeof buildAnalysis>, chart: Astrolabe, gender: Gender) {
@@ -464,17 +560,17 @@ function buildLifeReadings(analysis: ReturnType<typeof buildAnalysis>, chart: As
   return [
     {
       icon: "业", label: "事业", headline: careerHeadline,
-      text: `八字官杀约${formatGodCount(careerGods)}处、食伤约${formatGodCount(outputGods)}处、印星约${formatGodCount(resourceGods)}处，日主为${analysis.strength}；紫微官禄宫落${careerPalace?.heavenlyStem || "—"}${careerPalace?.earthlyBranch || "—"}，见${palaceStars(careerPalace)}。${careerGods >= outputGods ? "适合把责任边界、标准和决策权说清楚" : "适合凭作品、表达和解决问题的能力获得位置"}，并用喜${analysis.favorable.join("、")}的方式持续积累。`,
+      text: `八字中官杀${describeGodPresence(careerGods)}、食伤${describeGodPresence(outputGods)}、印星${describeGodPresence(resourceGods)}，日主为${analysis.strength}；紫微官禄宫落${careerPalace?.heavenlyStem || "—"}${careerPalace?.earthlyBranch || "—"}，见${palaceStars(careerPalace)}。${careerGods >= outputGods ? "适合把责任边界、标准和决策权说清楚" : "适合凭作品、表达和解决问题的能力获得位置"}，并用喜${analysis.favorable.join("、")}的方式持续积累。`,
       keywords: `${careerPalace?.majorStars?.slice(0, 2).map((star) => star.name).join(" / ") || "借对宫"} / ${analysis.favorable.join(" / ")}`,
     },
     {
       icon: "财", label: "财富", headline: wealthHeadline,
-      text: `八字财星约${formatGodCount(wealthGods)}处，${analysis.strength === "身弱" ? "承载力比机会数量更重要，扩张前要先补现金流与执行能力" : "具备一定任财基础，但仍要区分稳定收入和高波动机会"}；紫微财帛宫见${palaceStars(wealthPalace)}。具体策略是先用${labels[analysis.favorable[0]]}建立可重复收入，再按可承受损失配置风险。`,
-      keywords: `财星 ${formatGodCount(wealthGods)} / ${wealthPalace?.majorStars?.slice(0, 2).map((star) => star.name).join(" / ") || "借对宫"} / 现金流`,
+      text: `八字中财星${describeGodPresence(wealthGods)}，${analysis.strength === "身弱" ? "承载力比机会数量更重要，扩张前要先补现金流与执行能力" : "具备一定任财基础，但仍要区分稳定收入和高波动机会"}；紫微财帛宫见${palaceStars(wealthPalace)}。具体策略是先用${labels[analysis.favorable[0]]}建立可重复收入，再按可承受损失配置风险。`,
+      keywords: `财星${describeGodPresence(wealthGods)} / ${wealthPalace?.majorStars?.slice(0, 2).map((star) => star.name).join(" / ") || "借对宫"} / 现金流`,
     },
     {
       icon: "情", label: "情感", headline: relationHeadline,
-      text: `${gender}命以${gender === "男" ? "财星" : "官杀"}观察伴侣线索，本盘约${formatGodCount(spouseGods)}处；日支为${analysis.natalBranches[2] || "—"}，是亲密关系中的落脚点。紫微夫妻宫见${palaceStars(spousePalace)}。${spouseGods >= 1.5 ? "互动机会较多时更要提前说清承诺、金钱与个人空间" : "不宜用进度衡量关系，先验证价值观和日常节奏是否相容"}。`,
+      text: `${gender}命以${gender === "男" ? "财星" : "官杀"}观察伴侣线索，本盘此类信号${describeGodPresence(spouseGods)}；日支为${analysis.natalBranches[2] || "—"}，是亲密关系中的落脚点。紫微夫妻宫见${palaceStars(spousePalace)}。${spouseGods >= 1.5 ? "互动机会较多时更要提前说清承诺、金钱与个人空间" : "不宜用进度衡量关系，先验证价值观和日常节奏是否相容"}。`,
       keywords: `${gender === "男" ? "财星" : "官杀"} / 日支${analysis.natalBranches[2] || "—"} / ${spousePalace?.majorStars?.slice(0, 2).map((star) => star.name).join(" / ") || "借对宫"}`,
     },
   ];
@@ -483,7 +579,9 @@ function buildLifeReadings(analysis: ReturnType<typeof buildAnalysis>, chart: As
 function buildPatternInsight(analysis: ReturnType<typeof buildAnalysis>) {
   const visible = analysis.tenGods.filter((item) => item.god !== "日主").map((item) => `${item.label}${item.god}`).join("、");
   const relation = analysis.interactions.length ? `地支见${analysis.interactions.join("、")}` : "地支未见明显六合或六冲成对出现";
-  return `本盘五行以${analysis.dominantElement}最重、${analysis.weakestElement}相对较少；天干十神为${visible}，${relation}。因此行动策略应从喜${analysis.favorable.join("、")}落地：${labels[analysis.favorable[0]]}优先，${labels[analysis.favorable[1]]}辅助，而不是套用同一套性格结论。`;
+  const primary = elementGuidance[analysis.favorable[0]];
+  const secondary = elementGuidance[analysis.favorable[1]];
+  return `本盘五行以${analysis.dominantElement}最重、${analysis.weakestElement}相对较少；天干十神为${visible}，${relation}。当下先用喜${analysis.favorable[0]}的方式“${primary.title}”，再以喜${analysis.favorable[1]}的方式“${secondary.title}”辅助；下面已给出可直接执行的做法。`;
 }
 
 function answerQuestion(question: string, analysis: ReturnType<typeof buildAnalysis>, chart: Astrolabe, luck: ReturnType<typeof buildLuck>, gender: Gender) {
@@ -634,8 +732,8 @@ export default function Home() {
               {heroPillars.map((pillar, index) => (
                 <div className={`pillar pillar-${index}`} key={`${pillar}-${index}`}>
                   <span>{["年柱", "月柱", "日柱", "时柱"][index]}</span>
-                  <div className={`stem element-${elementClass[elementOf[pillar[0]] || "土"]}`}>{pillar[0]}<i>{elementOf[pillar[0]] || "土"}</i></div>
-                  <div className={`branch element-${elementClass[elementOf[pillar[1]] || "土"]}`}>{pillar[1]}<i>{elementOf[pillar[1]] || "土"}</i></div>
+                  <div className={`stem element-${elementClass[elementOf[pillar[0]] || "土"]}`}><span className="glyph">{pillar[0]}</span><i>{elementOf[pillar[0]] || "土"}</i></div>
+                  <div className={`branch element-${elementClass[elementOf[pillar[1]] || "土"]}`}><span className="glyph">{pillar[1]}</span><i>{elementOf[pillar[1]] || "土"}</i></div>
                   <strong>{analysis.tenGods[index]?.god || "—"}</strong>
                   <small>藏干 {analysis.tenGods[index]?.hidden || "—"}</small>
                 </div>
@@ -647,7 +745,7 @@ export default function Home() {
             <div className="chart-summary">
               <div className="day-master"><span>日主</span><b>{analysis.dayStem}</b><p>{analysis.dayElement}命 · {labels[analysis.dayElement]}</p></div>
               <div className="balance-mini"><span>旺衰</span><strong>{analysis.strength}</strong><div><i style={{ width: `${Math.round(analysis.ratio * 100)}%` }} /></div><small>扶身力量 {Math.round(analysis.ratio * 100)}%</small></div>
-              <div className="useful-gods"><span>喜用</span><div>{analysis.favorable.map((item) => <b key={item}>{item}</b>)}</div><small>宜顺势而用</small></div>
+              <div className="useful-gods"><span>喜用</span><div>{analysis.favorable.map((item) => <b className={`element-${elementClass[item]}`} key={item}>{item}</b>)}</div><small>宜顺势而用</small></div>
             </div>
           </div>
         ) : (
@@ -673,7 +771,7 @@ export default function Home() {
                   <div><span>{item.name}</span><b>{item.branch}</b></div>
                   <h4>{item.stars}</h4><small>辅曜：{item.support}</small>
                   <p>{item.core}</p>
-                  <dl><dt>三方怎么合看</dt><dd>{item.triad}</dd><dt>对宫在看什么</dt><dd>{item.opposite}</dd></dl>
+                  <dl><dt>两个三方宫各自负责什么</dt><dd>{item.triad}</dd><dt>对宫如何触发与制衡本宫</dt><dd>{item.opposite}</dd></dl>
                   <em>{item.action}</em>
                 </article>)}
               </div>
@@ -690,14 +788,21 @@ export default function Home() {
           <article className="strength-card">
             <div className="article-title"><span>01</span><div><small>体用平衡</small><h3>{analysis.dayStem}{analysis.dayElement}日主 · {analysis.strength}</h3></div><b>{Math.round(analysis.ratio * 100)}<small>%</small></b></div>
             <p>日主得令与否，要同时看月令、通根、透干和全局制化。此盘扶身力量约占 {Math.round(analysis.ratio * 100)}%，{analysis.strength === "身弱" ? "宜先补足承载力，再担财官。" : "已有承载力，宜以泄耗制衡打开格局。"}</p>
-            <div className="element-bars">{analysis.normalized.map((item) => <div key={item.name}><span>{item.name}</span><div><i style={{ width: `${Math.max(item.value, 6)}%` }} /></div><b>{item.raw}</b></div>)}</div>
-            <div className="god-row"><span>用神 <b>{analysis.favorable[0]}</b></span><span>喜神 <b>{analysis.favorable[1]}</b></span><span>慎用 <b>{analysis.avoid.join("、")}</b></span></div>
+            <div className="element-bars">{analysis.normalized.map((item) => <div key={item.name}><span className={`element-${elementClass[item.name]}`}>{item.name}</span><div><i style={{ width: `${Math.max(item.value, 6)}%` }} /></div><b>{item.raw}</b></div>)}</div>
+            <div className="god-row"><span>用神 <b className={`element-${elementClass[analysis.favorable[0]]}`}>{analysis.favorable[0]}</b></span><span>喜神 <b className={`element-${elementClass[analysis.favorable[1]]}`}>{analysis.favorable[1]}</b></span><span>慎用 <b>{analysis.avoid.join("、")}</b></span></div>
           </article>
           <article className="pattern-card">
             <div className="article-title compact"><span>02</span><div><small>十神关系</small><h3>看见行为模式</h3></div></div>
-            <div className="ten-gods">{analysis.tenGods.map((item) => <div key={item.label}><span>{item.label}</span><strong>{item.god}</strong><small>{item.hidden}</small></div>)}</div>
+            <div className="ten-gods">{analysis.tenGods.map((item) => <div key={item.label}><span>{item.label}</span><strong className={`element-${elementClass[item.element]}`}><span>{item.god}</span><i>{item.element}</i></strong><small>藏干 {item.hidden}</small></div>)}</div>
             <blockquote>“旺者宜泄，弱者宜扶。取用之道，不离中和。”</blockquote>
             <p>{patternInsight}</p>
+            <div className="useful-action-list">
+              {analysis.favorable.map((element, index) => <div key={`action-${element}`}>
+                <b className={`element-${elementClass[element]}`}>{index === 0 ? "用神" : "喜神"}·{element}</b>
+                <strong>{elementGuidance[element].title}</strong>
+                <p>{elementGuidance[element].steps.map((step, stepIndex) => `${stepIndex + 1}．${step}`).join("；")}。</p>
+              </div>)}
+            </div>
           </article>
           <article className="life-card">
             {lifeReadings.map((item) => <div className="life-item" key={item.label}><span className="life-icon">{item.icon}</span><div><small>{item.label}</small><h3>{item.headline}</h3><p>{item.text}</p><b>本盘依据 · {item.keywords}</b></div></div>)}
