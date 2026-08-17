@@ -38,6 +38,9 @@ test("renders the complete Xuanji destiny experience", async () => {
   assert.match(html, /感情关键转折/);
   assert.match(html, /重点年份/);
   assert.match(html, /以立春为界/);
+  assert.match(html, /运内重点年/);
+  assert.match(html, /命盘依据/);
+  assert.match(html, /现实核验/);
   assert.match(html, /做月度预算并保留应急金/);
   assert.match(html, /element-metal/);
   assert.match(html, /心中有惑/);
@@ -79,4 +82,14 @@ test("判词避免夸张与恭维式话术", async () => {
   const source = await readFile(new URL("../app/page.tsx", import.meta.url), "utf8");
   assert.doesNotMatch(source, /优势容易被别人看见|机会可见|关系机会不弱|贵人资源成为关键/);
   assert.match(source, /仍要用经历、能力与现实条件核实/);
+});
+
+test("默认使用女性示例并补足大运卡片信息", async () => {
+  const source = await readFile(new URL("../app/page.tsx", import.meta.url), "utf8");
+  const styles = await readFile(new URL("../app/globals.css", import.meta.url), "utf8");
+  assert.match(source, /name: "林女士", gender: "女" as Gender/);
+  assert.match(source, /fortuneGod/);
+  assert.match(source, /dayRelation/);
+  assert.match(source, /className="turning-card-facts"/);
+  assert.match(styles, /\.turning-card-facts/);
 });

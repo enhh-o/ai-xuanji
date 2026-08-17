@@ -384,6 +384,8 @@ function buildLuck(pillars: string[], gender: Gender, solar: ReturnType<typeof t
       relationshipTurnScore,
       relationshipReasons,
       annualSignals,
+      fortuneGod,
+      dayRelation: dayBranchClash ? `冲日支${dayBranch}` : dayBranchHarmony ? `合日支${dayBranch}` : `与日支${dayBranch || "—"}无直接合冲`,
       careerAdvice: mode === "进取" ? `可主动争取职位、客户或新赛道，但先用${labels[analysis.favorable[0]]}设定阶段验收点。` : mode === "蓄势" ? "先稳住现金流、职责边界和核心能力，不宜因一时压力裸辞或重仓转轨。" : "先以项目、兼职或小范围试点验证新方向，达到量化标准后再加码。",
       relationshipAdvice: dayBranchClash ? "先处理生活节奏、距离、金钱与边界的重新协商，不在情绪最高点做终局决定。" : dayBranchHarmony ? "适合推进关系确认与共同计划，但要把承诺、金钱和个人空间说具体。" : "重点观察价值观、沟通方式和日常节奏是否经得住现实验证，不用进度代替质量。",
       decadalPalace: decadalPalace?.name || "未落入当前大限范围",
@@ -684,7 +686,7 @@ function answerQuestion(question: string, analysis: ReturnType<typeof buildAnaly
 
 export default function Home() {
   const [form, setForm] = useState({
-    name: "林先生", gender: "男" as Gender, calendar: "solar" as CalendarKind, date: "1990-01-01",
+    name: "林女士", gender: "女" as Gender, calendar: "solar" as CalendarKind, date: "1990-01-01",
     lunarYear: 1990, lunarMonth: 1, lunarDay: 5, isLeapMonth: false,
     time: "12:30", province: "北京市", city: "北京市",
   });
@@ -937,9 +939,17 @@ export default function Home() {
                 {group.items.map((fortune) => {
                   const reasons = group.key === "career" ? fortune.careerReasons : group.key === "relationship" ? fortune.relationshipReasons : fortune.turnReasons;
                   const advice = group.key === "career" ? fortune.careerAdvice : group.key === "relationship" ? fortune.relationshipAdvice : fortune.mode === "进取" ? `围绕${labels[analysis.favorable[0]]}主动争取可量化的权责，但分阶段投入。` : fortune.mode === "蓄势" ? "先稳现金流与关系边界，避免在变化信号最强时一次性押注。" : `小步试错、季度复盘，以${fortune.decadalPalace}相关现实事件决定是否加码。`;
+                  const annual = group.key === "career" ? fortune.annualSignals.career : group.key === "relationship" ? fortune.annualSignals.relationship : fortune.annualSignals.overall;
+                  const basis = group.key === "career" ? `${fortune.fortuneGod} · 紫微大限${fortune.decadalPalace} · ${fortune.mode}` : group.key === "relationship" ? `${fortune.fortuneGod} · ${fortune.dayRelation} · 紫微大限${fortune.decadalPalace}` : `${fortune.element}${fortune.branchElement}运 · 紫微大限${fortune.decadalPalace}`;
+                  const verification = group.key === "career" ? "以岗位、合同、收入结构或项目验收的实际变化为证，不只看主观感受。" : group.key === "relationship" ? "以承诺、联系频率、金钱安排和共同计划是否落实为证。" : "观察居住、团队、职责或现金流中，是否出现持续三个月以上的结构变化。";
                   return <article key={`${group.key}-${fortune.pillar}`}>
                     <div><strong>{fortune.pillar}运</strong><span>{fortune.years} · {fortune.mode}</span></div>
                     <p>{reasons.join("；") || `大运五行为${fortune.element}${fortune.branchElement}，与原局喜忌形成阶段差异。`}</p>
+                    <dl className="turning-card-facts">
+                      <div><dt>运内重点年</dt><dd>{annual.year} · {annual.pillar}</dd></div>
+                      <div><dt>命盘依据</dt><dd>{basis}</dd></div>
+                      <div><dt>现实核验</dt><dd>{verification}</dd></div>
+                    </dl>
                     <em>建议：{advice}</em>
                   </article>;
                 })}
