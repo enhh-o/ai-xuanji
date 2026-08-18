@@ -93,3 +93,33 @@ test("默认使用女性示例并补足大运卡片信息", async () => {
   assert.match(source, /className="turning-card-facts"/);
   assert.match(styles, /\.turning-card-facts/);
 });
+
+test("四柱八字可展开查看逐对关系和通俗含义", async () => {
+  const source = await readFile(new URL("../app/page.tsx", import.meta.url), "utf8");
+  const styles = await readFile(new URL("../app/globals.css", import.meta.url), "utf8");
+  assert.match(source, /查看八字关系/);
+  assert.match(source, /buildBaziRelations/);
+  assert.match(source, /buildStemRelation/);
+  assert.match(source, /buildBranchRelation/);
+  assert.match(source, /相害/);
+  assert.match(source, /相刑/);
+  assert.match(source, /半合/);
+  assert.match(source, /半会/);
+  assert.match(source, /不能单凭一个“合”或“冲”定好坏/);
+  assert.match(styles, /\.bazi-relations/);
+  assert.match(styles, /\.relation-item/);
+});
+
+test("每步大运按干支五行着色并可查看与八字的配合", async () => {
+  const source = await readFile(new URL("../app/page.tsx", import.meta.url), "utf8");
+  const styles = await readFile(new URL("../app/globals.css", import.meta.url), "utf8");
+  assert.match(source, /function ColoredPillar/);
+  assert.match(source, /buildFortuneCompatibility/);
+  assert.match(source, /selectedFortuneIndex/);
+  assert.match(source, /查看.*大运与八字的配合关系/);
+  assert.match(source, /放在一起怎么看/);
+  assert.match(source, /出生八字/);
+  assert.match(styles, /\.colored-pillar/);
+  assert.match(styles, /\.fortune-combo-panel/);
+  assert.match(styles, /\.fortune-node\.selected/);
+});
