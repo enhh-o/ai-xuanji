@@ -17,7 +17,11 @@ type RelationItem = {
   meaning: string;
   tone: RelationTone;
   structural?: boolean;
+  leftIndex?: number;
+  rightIndex?: number;
+  layer?: "stem" | "branch";
 };
+type PalaceRelation = { target: Palace; relation: "三方" | "对宫"; tone: RelationTone; meaning: string };
 type Palace = {
   name: string;
   heavenlyStem: string;
@@ -268,8 +272,8 @@ function buildBaziRelations(pillars: string[]) {
   const branchRelations: RelationItem[] = [];
   pillars.forEach((pillar, leftIndex) => pillars.slice(leftIndex + 1).forEach((other, offset) => {
     const rightIndex = leftIndex + offset + 1;
-    stemRelations.push(buildStemRelation(pillar[0], other[0], `${pillarLabels[leftIndex]}天干`, `${pillarLabels[rightIndex]}天干`));
-    branchRelations.push(buildBranchRelation(pillar[1], other[1], `${pillarLabels[leftIndex]}地支`, `${pillarLabels[rightIndex]}地支`));
+    stemRelations.push({ ...buildStemRelation(pillar[0], other[0], `${pillarLabels[leftIndex]}天干`, `${pillarLabels[rightIndex]}天干`), leftIndex, rightIndex, layer: "stem" });
+    branchRelations.push({ ...buildBranchRelation(pillar[1], other[1], `${pillarLabels[leftIndex]}地支`, `${pillarLabels[rightIndex]}地支`), leftIndex, rightIndex, layer: "branch" });
   }));
   const all = [...stemRelations, ...branchRelations];
   const structural = all.filter((item) => item.structural);
@@ -278,7 +282,7 @@ function buildBaziRelations(pillars: string[]) {
   const summary = structural.length
     ? `四柱共有12组两两关系，其中较需要留意的结构关系有${structural.length}组：${supports.length ? `${supports.length}组偏向配合` : "没有明显配合结构"}，${tensions.length ? `${tensions.length}组带有拉扯或调整信号` : "没有明显拉扯结构"}。它们要结合喜忌、旺衰和现实经历一起看，不能单凭一个“合”或“冲”定好坏。`
     : "四柱之间没有明显的合、冲、刑、害、破或半合半会，主要看五行之间怎样相生、相克；这通常表示关系更偏日常积累，而不是强烈结构变化。";
-  return { stemRelations, branchRelations, summary };
+  return { stemRelations, branchRelations, visualRelations: structural, summary };
 }
 
 function completedBranchGroups(natalBranches: string[], fortuneBranch: string) {
@@ -290,8 +294,8 @@ function completedBranchGroups(natalBranches: string[], fortuneBranch: string) {
 }
 
 function buildFortuneCompatibility(pillars: string[], fortunePillar: string, analysis: ReturnType<typeof buildAnalysis>) {
-  const stemRelations = pillars.map((pillar, index) => buildStemRelation(pillar[0], fortunePillar[0], `${pillarLabels[index]}天干`, "大运天干"));
-  const branchRelations = pillars.map((pillar, index) => buildBranchRelation(pillar[1], fortunePillar[1], `${pillarLabels[index]}地支`, "大运地支"));
+  const stemRelations = pillars.map((pillar, index) => ({ ...buildStemRelation(pillar[0], fortunePillar[0], `${pillarLabels[index]}天干`, "大运天干"), leftIndex: index, layer: "stem" as const }));
+  const branchRelations = pillars.map((pillar, index) => ({ ...buildBranchRelation(pillar[1], fortunePillar[1], `${pillarLabels[index]}地支`, "大运地支"), leftIndex: index, layer: "branch" as const }));
   const structural = branchRelations.filter((item) => item.structural);
   const completed = completedBranchGroups(analysis.natalBranches, fortunePillar[1]);
   const fortuneGod = tenGod(analysis.dayStem, fortunePillar[0]);
@@ -314,6 +318,7 @@ function buildFortuneCompatibility(pillars: string[], fortunePillar: string, ana
     : "共同来看，这一步有可以借力的地方，也仍有需要校准的环节。先把目标说具体，再用阶段结果决定是否继续加码。";
   return {
     stemRelations, branchRelations, fortuneGod,
+    visualRelations: [...stemRelations, ...branchRelations].filter((item) => item.structural),
     summary: `大运天干${fortunePillar[0]}对日主${analysis.dayStem}来说是${fortuneGod}。${balanceText}${structureText}${groupText}${conclusion}`,
   };
 }
@@ -802,6 +807,40 @@ function buildZiweiReading(chart: Astrolabe, analysis: ReturnType<typeof buildAn
   };
 }
 
+function buildZiweiPalaceDetail(chart: Astrolabe, analysis: ReturnType<typeof buildAnalysis>, palaceName: string) {
+  const palace = palaceByName(chart, palaceName) || chart.palaces[0];
+  const major = palace?.majorStars.filter((star) => star.name).slice(0, 3) || [];
+  const starNames = major.map((star) => star.name);
+  const related = relatedPalaces(chart, palace);
+  const baseRole = palaceRoles[palace?.name || ""] || "看这个生活领域的默认条件与现实落点";
+  const starText = starNames.length ? compactPalaceSignal(palace) : "本宫无十四主星，先借对宫的星曜来定调。";
+  const watch = starNames.slice(0, 2).map((name) => starWatchouts[name]).filter(Boolean).join("；");
+  const direct = starNames.length
+    ? `直断：${palace?.name}${starNames.length > 1 ? `以${starNames.slice(0, 2).join("、")}同宫` : `见${starNames[0]}`}，${baseRole}。${starText}`
+    : `直断：${palace?.name}为空宫，这个领域不能只凭“空”下结论，要看对宫怎么把力量借过来。`;
+  const action = palace && palaceElementActions[analysis.favorable[0]][palace.name]
+    ? `建议：先按喜${analysis.favorable[0]}做——${palaceElementActions[analysis.favorable[0]][palace.name]}；再用喜${analysis.favorable[1]}补足${palaceElementActions[analysis.favorable[1]][palace.name] || "规则与执行"}。`
+    : `建议：把${palace?.name || "这个领域"}拆成具体目标、边界与复盘节点，避免只凭一时感觉判断。`;
+  const relations: PalaceRelation[] = [
+    ...related.triads.map((item) => ({
+      target: item, relation: "三方", tone: "support" as RelationTone,
+      meaning: `${palace?.name}与${item.name}属于三方关系：${item.name}${relatedPalacePurposes[item.name] || palaceRoles[item.name] || "提供现实支援"}。${compactPalaceSignal(item)}`,
+    })),
+    ...(related.opposite ? [{
+      target: related.opposite, relation: "对宫", tone: "tension" as RelationTone,
+      meaning: `${palace?.name}的对宫是${related.opposite.name}：${relatedPalacePurposes[related.opposite.name] || "外部条件会检验本宫是否站得住"}。${compactPalaceSignal(related.opposite)}两宫合看，是为了判断内在选择能否经得起现实反馈。`,
+    }] : []),
+  ];
+  return {
+    palace,
+    stars: palaceStars(palace),
+    direct,
+    action,
+    watch: watch || "本宫的力量宜用在明确的现实目标上，避免过度解读单颗星。",
+    relations,
+  };
+}
+
 function godTotal(analysis: ReturnType<typeof buildAnalysis>, names: string[]) {
   return names.reduce((sum, name) => sum + (analysis.godCounts[name] || 0), 0);
 }
@@ -830,20 +869,36 @@ function buildLifeReadings(analysis: ReturnType<typeof buildAnalysis>, chart: As
   return [
     {
       icon: "业", label: "事业", headline: careerHeadline,
+      verdict: careerGods >= 1.5 || outputGods >= 1.5 ? "结论：事业能做出成绩，但靠能力、责任和持续交付，不宜只等机会自己出现。" : "结论：事业前期更靠稳定积累，别频繁换方向；把一项能沉淀的能力做深，比追热点更有用。",
       text: `八字中官杀${describeGodPresence(careerGods)}、食伤${describeGodPresence(outputGods)}、印星${describeGodPresence(resourceGods)}，日主为${analysis.strength}；紫微官禄宫落${careerPalace?.heavenlyStem || "—"}${careerPalace?.earthlyBranch || "—"}，见${palaceStars(careerPalace)}。职业判断宜${careerGods >= outputGods ? "把责任边界、标准和决策权说清楚" : "用作品、表达和解决问题的能力验证位置"}，并用喜${analysis.favorable.join("、")}的方式持续积累。`,
       keywords: `${careerPalace?.majorStars?.slice(0, 2).map((star) => star.name).join(" / ") || "借对宫"} / ${analysis.favorable.join(" / ")}`,
     },
     {
       icon: "财", label: "财富", headline: wealthHeadline,
+      verdict: wealthGods >= 1.5 && analysis.strength !== "身弱" ? "结论：财运有基础，但钱要靠管理留下来；能赚不等于能存，投资不宜一把梭。" : "结论：财运重在正现金流和可复制能力，快钱、重仓与人情借贷要更谨慎。",
       text: `八字中财星${describeGodPresence(wealthGods)}，${analysis.strength === "身弱" ? "承载力比收入机会的数量更重要，扩张前要先补现金流与执行能力" : "日主并非身弱，但仍要区分稳定收入和高波动来源"}；紫微财帛宫见${palaceStars(wealthPalace)}。具体策略是先用${labels[analysis.favorable[0]]}建立可重复收入，再按可承受损失配置风险。`,
       keywords: `财星${describeGodPresence(wealthGods)} / ${wealthPalace?.majorStars?.slice(0, 2).map((star) => star.name).join(" / ") || "借对宫"} / 现金流`,
     },
     {
       icon: "情", label: "情感", headline: relationHeadline,
+      verdict: spouseGods >= 1.5 ? "结论：感情不是没机会，难点在边界和承诺是否说清；越含糊，越容易反复。" : "结论：感情宜慢不宜赶，先看相处节奏与价值观；不适合用关系进度证明自己。",
       text: `${gender}命以${gender === "男" ? "财星" : "官杀"}观察伴侣线索，本盘此类信号${describeGodPresence(spouseGods)}；日支为${analysis.natalBranches[2] || "—"}，是亲密关系中的落脚点。紫微夫妻宫见${palaceStars(spousePalace)}。${spouseGods >= 1.5 ? "相关十神信号较多时，更要提前说清承诺、金钱与个人空间" : "不宜用进度衡量关系，先验证价值观和日常节奏是否相容"}。`,
       keywords: `${gender === "男" ? "财星" : "官杀"} / 日支${analysis.natalBranches[2] || "—"} / ${spousePalace?.majorStars?.slice(0, 2).map((star) => star.name).join(" / ") || "借对宫"}`,
     },
   ];
+}
+
+function buildPersonalitySummary(analysis: ReturnType<typeof buildAnalysis>, chart: Astrolabe) {
+  const lifePalace = palaceByName(chart, "命");
+  const stars = lifePalace?.majorStars.filter((star) => star.name).slice(0, 2).map((star) => star.name) || [];
+  const baziTone = analysis.strength === "身弱" ? "感受与压力反应更敏锐，做事需要先有稳定支点" : analysis.strength === "身强" ? "主见与推动力不弱，容易主动承担，也要防止过度用力" : "既能承担事情，也容易在选择上反复权衡";
+  const starTone = stars.length ? `${stars.join("、")}让你在外在表现上更重${stars.map((name) => starMeanings[name]).filter(Boolean).join("；")}` : "命宫主星信息不完整，性格以八字结构为主判断";
+  return {
+    headline: analysis.strength === "身弱" ? "敏感但不软弱，关键在先稳住自己" : analysis.strength === "身强" ? "能扛事，但要学会收力" : "有判断力，但别让犹豫拖慢行动",
+    summary: `八字看，你${baziTone}；紫微命宫${lifePalace ? `落${lifePalace.heavenlyStem}${lifePalace.earthlyBranch}` : "资料不足"}，${starTone}。两盘合看，性格不是单纯“好或坏”，而是你习惯用什么方式面对压力、关系和选择。`,
+    verdict: `直断：你最需要修的不是“更拼”，而是把喜${analysis.favorable[0]}、${analysis.favorable[1]}的做法变成日常规则。${analysis.avoid.join("、")}太过时，容易让判断变急、节奏变乱。`,
+    advice: `建议：${elementGuidance[analysis.favorable[0]].steps[0]}；再${elementGuidance[analysis.favorable[1]].steps[1]}。先把基础盘稳，再谈扩大目标。`,
+  };
 }
 
 function buildPatternInsight(analysis: ReturnType<typeof buildAnalysis>) {
@@ -873,6 +928,94 @@ function ColoredPillar({ pillar, suffix = "", className = "" }: { pillar: string
   </span>;
 }
 
+function relationKey(item: RelationItem, prefix: string) {
+  return `${prefix}-${item.layer || "none"}-${item.leftIndex ?? "x"}-${item.rightIndex ?? "x"}-${item.left}-${item.right}-${item.relation}`;
+}
+
+function shortRelationLabel(item: RelationItem) {
+  if (item.relation.includes("相冲")) return "冲";
+  if (item.relation.includes("相害")) return "害";
+  if (item.relation.includes("相刑")) return "刑";
+  if (item.relation.includes("相破")) return "破";
+  if (item.relation.includes("六合") || item.relation.includes("相合")) return "合";
+  if (item.relation.includes("半合")) return "半合";
+  if (item.relation.includes("半会")) return "半会";
+  return "关系";
+}
+
+function relationImpact(item: RelationItem) {
+  if (item.relation.includes("相冲")) return "影响：这条线代表变化感较强，常落在节奏、位置、环境或关系安排需要调整的地方。";
+  if (/(相害|相刑|相破)/.test(item.relation)) return "影响：这条线不是一定出事，而是提醒这里更容易有误会、反复或消耗，提前把边界和步骤说清会更省力。";
+  if (/(相合|六合|半合|半会)/.test(item.relation)) return "影响：这条线代表有可借力之处，适合通过合作、规则或共同目标让力量落到实处，别只停在感觉上。";
+  return "影响：这条关系更像长期的相互影响，需放在整体强弱和现实选择里判断。";
+}
+
+function RelationDetail({ item, title = "这条关系怎么读" }: { item: RelationItem; title?: string }) {
+  return <div className={`relation-detail ${item.tone}`}>
+    <div><span>{title}</span><strong>{item.leftLabel}<b className={`element-${elementClass[elementOf[item.left] || "土"]}`}>{item.left}</b> · {item.rightLabel}<b className={`element-${elementClass[elementOf[item.right] || "土"]}`}>{item.right}</b></strong></div>
+    <h4>{item.relation}</h4>
+    <p>{item.meaning}</p>
+    <em>{relationImpact(item)} {item.tone === "tension" ? "建议：重要决定留复核，先处理现实条件再处理情绪。" : "建议：把有利的配合落实到明确分工、时间表或可验证的成果。"}</em>
+  </div>;
+}
+
+function BaziRelationMap({ pillars, relations, selectedKey, onSelect }: { pillars: string[]; relations: RelationItem[]; selectedKey: string | null; onSelect: (key: string) => void }) {
+  if (!relations.length) return <p className="relation-empty">本盘没有需要特别标出的合、冲、刑、害、破或半合半会；重点放在五行强弱与日常取舍即可。</p>;
+  return <div className="bazi-relation-map" aria-label="八字关键关系连线图">
+    <p>只标出有实际分量的关系。点击线上的“合、冲、害、刑、破”查看解释。</p>
+    <div className="relation-map-canvas">
+      <div className="relation-map-nodes">
+        {pillars.map((pillar, index) => <div className="relation-map-node" key={`bazi-node-${index}`}>
+          <small>{pillarLabels[index]}</small><span className={`element-${elementClass[elementOf[pillar[0]] || "土"]}`}>{pillar[0]}</span><b className={`element-${elementClass[elementOf[pillar[1]] || "土"]}`}>{pillar[1]}</b>
+        </div>)}
+      </div>
+      {relations.map((item, index) => {
+        const key = relationKey(item, "bazi");
+        const from = ((item.leftIndex || 0) + .5) * 25;
+        const to = ((item.rightIndex || 1) + .5) * 25;
+        const top = item.layer === "stem" ? 27 + (index % 3) * 8 : 68 + (index % 3) * 8;
+        return <button type="button" className={`relation-map-link ${item.tone} ${selectedKey === key ? "selected" : ""}`} key={key} style={{ left: `${from}%`, width: `${to - from}%`, top: `${top}%` }} aria-pressed={selectedKey === key} onClick={() => onSelect(key)}>
+          <span>{shortRelationLabel(item)}</span>
+        </button>;
+      })}
+    </div>
+  </div>;
+}
+
+function FortuneRelationMap({ fortune, relations, selectedKey, onSelect }: { fortune: string; relations: RelationItem[]; selectedKey: string | null; onSelect: (key: string) => void }) {
+  if (!relations.length) return <p className="relation-empty dark">这步大运与出生八字没有明显的合、冲、刑、害、破或半合半会，影响更像慢慢叠加，重点看五行是否帮助整体平衡。</p>;
+  return <div className="fortune-relation-map" aria-label={`${fortune}大运的关键关系连线图`}>
+    <p>只画出这步大运和出生八字之间需要重点留意的关系；点击连线看它会怎样影响这个阶段。</p>
+    <div className="fortune-relation-core"><span>本步大运</span><ColoredPillar pillar={fortune} /></div>
+    <div className="fortune-relation-list">
+      {relations.map((item) => {
+        const key = relationKey(item, `fortune-${fortune}`);
+        const rightChar = item.layer === "stem" ? fortune[0] : fortune[1];
+        return <div className="fortune-relation-row" key={key}>
+          <span className="fortune-relation-node">{item.leftLabel}<b className={`element-${elementClass[elementOf[item.left] || "土"]}`}>{item.left}</b></span>
+          <button type="button" className={`fortune-relation-link ${item.tone} ${selectedKey === key ? "selected" : ""}`} aria-pressed={selectedKey === key} onClick={() => onSelect(key)}><span>{shortRelationLabel(item)}</span></button>
+          <span className="fortune-relation-node">大运{item.layer === "stem" ? "天干" : "地支"}<b className={`element-${elementClass[elementOf[rightChar] || "土"]}`}>{rightChar}</b></span>
+        </div>;
+      })}
+    </div>
+  </div>;
+}
+
+function PalaceRelationMap({ palace, relations, selectedKey, onSelect }: { palace: Palace; relations: PalaceRelation[]; selectedKey: string | null; onSelect: (key: string) => void }) {
+  if (!relations.length) return <p className="relation-empty">这个宫位的三方、对宫资料暂不完整，可先从本宫星曜和现实经历判断。</p>;
+  return <div className="palace-relation-map" aria-label={`${palace.name}的宫位关系连线图`}>
+    <div className="palace-relation-focus"><span>当前查看</span><strong>{palace.name}</strong><small>{palace.heavenlyStem}{palace.earthlyBranch}</small></div>
+    <div className="palace-relation-list">
+      {relations.map((item) => {
+        const key = `${palace.name}-${item.target.name}-${item.relation}`;
+        return <div className="palace-relation-row" key={key}>
+          <span>{palace.name}</span><button type="button" className={`palace-relation-line ${item.tone} ${selectedKey === key ? "selected" : ""}`} aria-pressed={selectedKey === key} onClick={() => onSelect(key)}><i>{item.relation}</i></button><span>{item.target.name}<small>{item.target.heavenlyStem}{item.target.earthlyBranch}</small></span>
+        </div>;
+      })}
+    </div>
+  </div>;
+}
+
 function RelationCard({ item }: { item: RelationItem }) {
   return <article className={`relation-item ${item.tone}`}>
     <div className="relation-pair">
@@ -897,8 +1040,11 @@ export default function Home() {
   const [isCalculating, setIsCalculating] = useState(false);
   const [formError, setFormError] = useState("");
   const [chartTab, setChartTab] = useState<"bazi" | "ziwei">("bazi");
-  const [showBaziRelations, setShowBaziRelations] = useState(false);
+  const [selectedBaziRelationKey, setSelectedBaziRelationKey] = useState<string | null>(null);
   const [selectedFortuneIndex, setSelectedFortuneIndex] = useState<number | null>(null);
+  const [selectedFortuneRelationKey, setSelectedFortuneRelationKey] = useState<string | null>(null);
+  const [selectedPalaceName, setSelectedPalaceName] = useState("命宫");
+  const [selectedZiweiRelationKey, setSelectedZiweiRelationKey] = useState<string | null>(null);
   const [question, setQuestion] = useState("");
   const [messages, setMessages] = useState<Array<{ role: "user" | "assistant"; text: string }>>([
     { role: "assistant", text: "命盘已就绪。你可以直接问事业、财富、情感或某个阶段的选择，我会结合四柱与紫微盘直说重点。" },
@@ -907,6 +1053,7 @@ export default function Home() {
   const pillars = useMemo(() => chart.chineseDate.split(/\s+/).slice(0, 4), [chart]);
   const analysis = useMemo(() => buildAnalysis(pillars), [pillars]);
   const baziRelations = useMemo(() => buildBaziRelations(pillars), [pillars]);
+  const selectedBaziRelation = baziRelations.visualRelations.find((item) => relationKey(item, "bazi") === selectedBaziRelationKey) || null;
   const selectedProvince = useMemo(() => provinces.find((item) => item.name === form.province) || provinces[0], [form.province]);
   const luck = useMemo(() => buildLuck(pillars, submitted.gender, solar, analysis, chart), [pillars, submitted.gender, solar, analysis, chart]);
   const fortunes = luck.fortunes;
@@ -915,8 +1062,11 @@ export default function Home() {
     () => selectedFortune ? buildFortuneCompatibility(pillars, selectedFortune.pillar, analysis) : null,
     [pillars, selectedFortune, analysis],
   );
-  const ziweiReading = useMemo(() => buildZiweiReading(chart, analysis), [chart, analysis]);
+  const selectedFortuneRelation = selectedCompatibility?.visualRelations.find((item) => relationKey(item, `fortune-${selectedFortune?.pillar || ""}`) === selectedFortuneRelationKey) || null;
+  const selectedPalaceDetail = useMemo(() => buildZiweiPalaceDetail(chart, analysis, selectedPalaceName), [chart, analysis, selectedPalaceName]);
+  const selectedZiweiRelation = selectedPalaceDetail.relations.find((item) => `${selectedPalaceDetail.palace.name}-${item.target.name}-${item.relation}` === selectedZiweiRelationKey) || null;
   const lifeReadings = useMemo(() => buildLifeReadings(analysis, chart, submitted.gender), [analysis, chart, submitted.gender]);
+  const personalitySummary = useMemo(() => buildPersonalitySummary(analysis, chart), [analysis, chart]);
   const patternInsight = useMemo(() => buildPatternInsight(analysis), [analysis]);
   const turningFortunes = fortunes.filter((fortune) => fortune.isTurningPoint);
   const careerTurningFortunes = fortunes.filter((fortune) => fortune.isCareerTurningPoint);
@@ -948,8 +1098,11 @@ export default function Home() {
       setSolar(adjusted);
       setChart(nextChart);
       setSubmitted(form);
-      setShowBaziRelations(false);
+      setSelectedBaziRelationKey(null);
       setSelectedFortuneIndex(null);
+      setSelectedFortuneRelationKey(null);
+      setSelectedPalaceName("命宫");
+      setSelectedZiweiRelationKey(null);
       setMessages([{ role: "assistant", text: `${form.name || "命主"}的双盘已重新排好。接下来的回答只使用这次输入的八字、紫微命盘与大运，不沿用上一位的结论。` }]);
       setIsCalculating(false);
       window.setTimeout(() => resultRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }), 80);
@@ -1054,53 +1207,34 @@ export default function Home() {
               <div className="balance-mini"><span>旺衰</span><strong>{analysis.strength}</strong><div><i style={{ width: `${Math.round(analysis.ratio * 100)}%` }} /></div><small>扶身力量 {Math.round(analysis.ratio * 100)}%</small></div>
               <div className="useful-gods"><span>喜用</span><div>{analysis.favorable.map((item) => <b className={`element-${elementClass[item]}`} key={item}>{item}</b>)}</div><small>宜顺势而用</small></div>
             </div>
-            <div className="relation-toggle-wrap">
-              <div><strong>不只看单个字，也看八个字怎样彼此影响</strong><small>共12组天干、地支两两关系，逐组说明“发生了什么”和“现实中怎么理解”。</small></div>
-              <button type="button" className={showBaziRelations ? "active" : ""} aria-expanded={showBaziRelations} aria-controls="bazi-relations" onClick={() => setShowBaziRelations((current) => !current)}>
-                {showBaziRelations ? "收起八字关系" : "查看八字关系"}<span>{showBaziRelations ? "−" : "+"}</span>
-              </button>
+            <div className="bazi-key-relations">
+              <div className="key-relations-head"><div><span>关键关系</span><h3>只标出真正需要看的线</h3><p>{baziRelations.summary}</p></div><small>线条颜色：绿为可借力，红为需调整，金为中性关系。</small></div>
+              <BaziRelationMap pillars={heroPillars} relations={baziRelations.visualRelations} selectedKey={selectedBaziRelationKey} onSelect={(key) => setSelectedBaziRelationKey((current) => current === key ? null : key)} />
+              {selectedBaziRelation && <RelationDetail item={selectedBaziRelation} title="八字关系详解" />}
             </div>
-            {showBaziRelations && <div className="bazi-relations" id="bazi-relations">
-              <div className="relation-panel-head"><span>八字内部关系</span><h3>每一组都拆开讲</h3><p>“合”不一定全好，“冲”也不一定全坏。下面先说明结构，再结合旺衰与喜忌判断它在这张盘里的分量。</p></div>
-              <section className="relation-section">
-                <div><span>01</span><h4>天干之间</h4><p>更接近外在做法、表达方式与事情如何推动。</p></div>
-                <div className="relation-list">{baziRelations.stemRelations.map((item, index) => <RelationCard item={item} key={`stem-relation-${index}`} />)}</div>
-              </section>
-              <section className="relation-section">
-                <div><span>02</span><h4>地支之间</h4><p>更接近日常环境、关系落点与事情怎样在现实里发生。</p></div>
-                <div className="relation-list">{baziRelations.branchRelations.map((item, index) => <RelationCard item={item} key={`branch-relation-${index}`} />)}</div>
-              </section>
-              <p className="relation-summary"><b>合起来怎么看：</b>{baziRelations.summary}</p>
-            </div>}
           </div>
         ) : (
           <>
             <div className="ziwei-grid">
               {chart.palaces.map((palace, index) => {
                 const position = ringPositions[index] || ringPositions[0];
-                return <div className={`palace ${palace.name.includes("命") ? "life-palace" : ""}`} style={{ gridColumn: position.col, gridRow: position.row }} key={`${palace.name}-${index}`}>
+                return <button type="button" className={`palace ${palace.name.includes("命") ? "life-palace" : ""} ${selectedPalaceDetail.palace.name === palace.name ? "selected" : ""}`} style={{ gridColumn: position.col, gridRow: position.row }} key={`${palace.name}-${index}`} aria-pressed={selectedPalaceDetail.palace.name === palace.name} onClick={() => { setSelectedPalaceName(palace.name); setSelectedZiweiRelationKey(null); }}>
                   <div className="palace-head"><b>{palace.name}</b><span>{palace.heavenlyStem}{palace.earthlyBranch}</span></div>
                   <div className="stars">{palace.majorStars.slice(0, 3).map((star) => <strong key={star.name}>{star.name}<small>{star.brightness}</small></strong>)}</div>
                   <p>{palace.minorStars.slice(0, 3).map((star) => star.name).join(" · ") || "辅星平守"}</p>
                   {palace.isBodyPalace && <i>身宫</i>}
-                </div>;
+                </button>;
               })}
               <div className="ziwei-center">
                 <span className="mini-seal">玄</span><p>{submitted.gender}命 · {chart.fiveElementsClass || "五行局"}</p><h3>{heroPillars.join(" · ")}</h3><small>{chart.lunarDate}</small><div><span>命主 {chart.soul || "—"}</span><span>身主 {chart.body || "—"}</span></div>
               </div>
             </div>
-            <div className="ziwei-reading">
-              <div className="ziwei-reading-head"><span>紫微重点解读</span><h3>{ziweiReading.headline}</h3><p>{ziweiReading.overview}</p></div>
-              <div className="ziwei-reading-grid">
-                {ziweiReading.cards.map((item) => <article key={item.name}>
-                  <div><span>{item.name}</span><b>{item.branch}</b></div>
-                  <h4>{item.stars}</h4><small>辅曜：{item.support}</small>
-                  <p>{item.core}</p>
-                  <dl><dt>两个三方宫各自负责什么</dt><dd>{item.triad}</dd><dt>对宫如何触发与制衡本宫</dt><dd>{item.opposite}</dd></dl>
-                  <em>{item.action}</em>
-                </article>)}
-              </div>
-              <p className="ziwei-method-note">三方四正不是一句模糊提醒：本宫定主题，两个三方宫看资源与协同，对宫看外部触发和制衡；四处信息能互相印证时，结论才更有分量。</p>
+            <div className="ziwei-focus-panel">
+              <div className="ziwei-focus-head"><span>点击宫位查看</span><h3>{selectedPalaceDetail.palace.name} · {selectedPalaceDetail.palace.heavenlyStem}{selectedPalaceDetail.palace.earthlyBranch}</h3><p>主星：{selectedPalaceDetail.stars}</p></div>
+              <p className="ziwei-direct"><b>{selectedPalaceDetail.direct}</b></p>
+              <PalaceRelationMap palace={selectedPalaceDetail.palace} relations={selectedPalaceDetail.relations} selectedKey={selectedZiweiRelationKey} onSelect={(key) => setSelectedZiweiRelationKey((current) => current === key ? null : key)} />
+              {selectedZiweiRelation && <div className={`ziwei-relation-detail ${selectedZiweiRelation.tone}`}><span>宫位连线详解 · {selectedZiweiRelation.relation}</span><h4>{selectedPalaceDetail.palace.name} ↔ {selectedZiweiRelation.target.name}</h4><p>{selectedZiweiRelation.meaning}</p><em>作用：这条线用于把本宫的判断放到{selectedZiweiRelation.target.name}所代表的现实领域里核验，不能只看单一宫位。</em></div>}
+              <div className="ziwei-focus-advice"><span>落地建议</span><p>{selectedPalaceDetail.action}</p><small>提醒：{selectedPalaceDetail.watch}</small></div>
             </div>
           </>
         )}
@@ -1108,8 +1242,13 @@ export default function Home() {
       </section>
 
       <section className="reading-section" id="reading">
-        <div className="reading-heading"><span>命 理 初 解</span><h2>先看能不能承受，再谈怎么选择</h2><p>以下只说明命盘结构与阶段倾向；结论是否成立，仍要用经历、能力与现实条件核实。小词典：出生八字是出生时排出的四柱；紫微十年主题是每十年重点落在哪个生活领域；喜用是较有助于整体平衡的五行。</p></div>
+        <div className="reading-heading"><span>命 理 初 解</span><h2>先给结论，再讲依据</h2><p>先用一句话说清性格、事业、财富与情感的重点，再展开命盘依据与可执行建议。命盘给的是倾向，不替代现实能力、经验与选择。</p></div>
         <div className="reading-grid">
+          <article className="personality-card">
+            <div className="personality-mark"><span>人</span><small>八字 × 紫微</small></div>
+            <div><span>性格总判</span><h3>{personalitySummary.headline}</h3><p>{personalitySummary.summary}</p></div>
+            <div className="personality-conclusion"><b>{personalitySummary.verdict}</b><p>{personalitySummary.advice}</p></div>
+          </article>
           <article className="strength-card">
             <div className="article-title"><span>01</span><div><small>体用平衡</small><h3>{analysis.dayStem}{analysis.dayElement}日主 · {analysis.strength}</h3></div><b>{Math.round(analysis.ratio * 100)}<small>%</small></b></div>
             <p>这里的“身强、身弱”说的是承担压力与使用资源的能力，不是身体好坏，也不是性格强弱。判断时会一起看出生月份、地支有没有根、天干有没有帮扶，以及全盘是否平衡。此盘扶身力量约占 {Math.round(analysis.ratio * 100)}%，{analysis.strength === "身弱" ? "更适合先把精力、能力和稳定支持补足，再扩大责任与投入。" : "已有一定承受力，更适合通过输出、取舍和规则让全盘回到平衡。"}</p>
@@ -1135,7 +1274,7 @@ export default function Home() {
             </div>
           </article>
           <article className="life-card">
-            {lifeReadings.map((item) => <div className="life-item" key={item.label}><span className="life-icon">{item.icon}</span><div><small>{item.label}</small><h3>{item.headline}</h3><p>{item.text}</p><b>本盘依据 · {item.keywords}</b></div></div>)}
+            {lifeReadings.map((item) => <div className="life-item" key={item.label}><span className="life-icon">{item.icon}</span><div><small>{item.label}总判</small><h3>{item.headline}</h3><b className="life-verdict">{item.verdict}</b><p>{item.text}</p><b>本盘依据 · {item.keywords}</b></div></div>)}
           </article>
         </div>
       </section>
@@ -1148,9 +1287,9 @@ export default function Home() {
           <p>按年干阴阳配合性别定顺逆，以出生时刻至相邻“节”的实际时差，采用“三日折一年、一日折四个月”换算。</p>
         </div>
         <div className="fortune-legend"><span><i className="dot progress" />适合进取</span><span><i className="dot steady" />稳中求进</span><span><i className="dot pause" />蓄势调整</span></div>
-        <p className="fortune-hint">点选下方任一组干支，展开查看它和年、月、日、时四柱分别有什么关系。</p>
+        <p className="fortune-hint">点选下方任一组干支，只显示这步大运与出生八字之间真正需要看的关键连线。</p>
         <div className="timeline">
-          {fortunes.map((fortune, index) => <button type="button" className={`fortune-node ${fortune.mode === "进取" ? "progress" : fortune.mode === "蓄势" ? "pause" : "steady"} ${selectedFortuneIndex === index ? "selected" : ""}`} key={`${fortune.pillar}-${index}`} aria-expanded={selectedFortuneIndex === index} aria-controls="fortune-compatibility" aria-label={`查看${fortune.pillar}大运与八字的配合关系`} onClick={() => setSelectedFortuneIndex((current) => current === index ? null : index)}>
+          {fortunes.map((fortune, index) => <button type="button" className={`fortune-node ${fortune.mode === "进取" ? "progress" : fortune.mode === "蓄势" ? "pause" : "steady"} ${selectedFortuneIndex === index ? "selected" : ""}`} key={`${fortune.pillar}-${index}`} aria-expanded={selectedFortuneIndex === index} aria-controls="fortune-compatibility" aria-label={`查看${fortune.pillar}大运与八字的配合关系`} onClick={() => { setSelectedFortuneIndex((current) => current === index ? null : index); setSelectedFortuneRelationKey(null); }}>
             <span className="node-age">{Math.floor(fortune.age)}<small>岁</small></span><i /><strong><ColoredPillar pillar={fortune.pillar} /></strong><small>{fortune.ageText}<br />{fortune.years}</small><b>{fortune.mode}</b>
             {(fortune.isTurningPoint || fortune.isCareerTurningPoint || fortune.isRelationshipTurningPoint) && <span className="turn-tags">{fortune.isTurningPoint && <em className="overall">全盘</em>}{fortune.isCareerTurningPoint && <em className="career">事业</em>}{fortune.isRelationshipTurningPoint && <em className="relationship">感情</em>}</span>}
           </button>)}
@@ -1158,13 +1297,11 @@ export default function Home() {
         {selectedFortune && selectedCompatibility && <div className="fortune-combo-panel" id="fortune-compatibility">
           <div className="combo-head">
             <div><span>已选择</span><h3><ColoredPillar pillar={selectedFortune.pillar} suffix="大运" /></h3><p>{selectedFortune.years} · {selectedFortune.mode} · 大运天干对日主来说是{selectedCompatibility.fortuneGod}</p></div>
-            <button type="button" onClick={() => setSelectedFortuneIndex(null)}>收起</button>
+            <button type="button" onClick={() => { setSelectedFortuneIndex(null); setSelectedFortuneRelationKey(null); }}>收起</button>
           </div>
-          <p className="combo-summary"><b>放在一起怎么看：</b>{selectedCompatibility.summary}</p>
-          <div className="combo-grid">
-            <section><div className="combo-section-title"><span>天干配合</span><p>看外在做法、资源和责任如何接入。</p></div><div className="combo-list">{selectedCompatibility.stemRelations.map((item, index) => <RelationCard item={item} key={`fortune-stem-${index}`} />)}</div></section>
-            <section><div className="combo-section-title"><span>地支配合</span><p>看环境、关系与现实事件如何被触发。</p></div><div className="combo-list">{selectedCompatibility.branchRelations.map((item, index) => <RelationCard item={item} key={`fortune-branch-${index}`} />)}</div></section>
-          </div>
+          <p className="combo-summary"><b>这步运的总判：</b>{selectedCompatibility.summary}</p>
+          <FortuneRelationMap fortune={selectedFortune.pillar} relations={selectedCompatibility.visualRelations} selectedKey={selectedFortuneRelationKey} onSelect={(key) => setSelectedFortuneRelationKey((current) => current === key ? null : key)} />
+          {selectedFortuneRelation && <RelationDetail item={selectedFortuneRelation} title={`${selectedFortune.pillar}大运关系详解`} />}
         </div>}
         <div className="fortune-advice">
           <div><span>↗</span><h3>可适度进取的阶段</h3><p>{progressFortunes.length ? `${progressFortunes.slice(0, 3).map((item) => `${item.pillar}运（${item.years}，紫微十年主题在${item.decadalPalace}）`).join("；")}。这些阶段有助于平衡的条件相对多，可在明确成本、验收点与退出条件后争取职位、市场或资源。` : `本盘前八步运暂未出现明确“进取”档，宜先按${labels[analysis.favorable[0]]}的方式逐步验证。`}</p></div>

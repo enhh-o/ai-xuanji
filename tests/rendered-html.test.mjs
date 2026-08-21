@@ -50,11 +50,17 @@ test("renders the complete Xuanji destiny experience", async () => {
   assert.doesNotMatch(html, /codex-preview|react-loading-skeleton/);
 });
 
-test("紫微解读包含具体三方与对宫职责", async () => {
+test("紫微命盘以宫位聚焦与宫间连线呈现三方和对宫职责", async () => {
   const source = await readFile(new URL("../app/page.tsx", import.meta.url), "utf8");
-  assert.match(source, /两个三方宫各自负责什么/);
-  assert.match(source, /对宫如何触发与制衡本宫/);
+  const styles = await readFile(new URL("../app/globals.css", import.meta.url), "utf8");
+  assert.match(source, /buildZiweiPalaceDetail/);
+  assert.match(source, /PalaceRelationMap/);
+  assert.match(source, /宫位连线详解/);
+  assert.match(source, /三方/);
+  assert.match(source, /对宫/);
   assert.match(source, /relatedPalacePurposes/);
+  assert.match(styles, /\.palace-relation-map/);
+  assert.match(styles, /\.palace-relation-line/);
 });
 
 test("三类关键转折分别按命盘信号计算", async () => {
@@ -81,7 +87,8 @@ test("三类关键转折分别按命盘信号计算", async () => {
 test("判词避免夸张与恭维式话术", async () => {
   const source = await readFile(new URL("../app/page.tsx", import.meta.url), "utf8");
   assert.doesNotMatch(source, /优势容易被别人看见|机会可见|关系机会不弱|贵人资源成为关键/);
-  assert.match(source, /仍要用经历、能力与现实条件核实/);
+  assert.match(source, /命盘给的是倾向/);
+  assert.match(source, /直断：/);
 });
 
 test("默认使用女性示例并补足大运卡片信息", async () => {
@@ -94,32 +101,48 @@ test("默认使用女性示例并补足大运卡片信息", async () => {
   assert.match(styles, /\.turning-card-facts/);
 });
 
-test("四柱八字可展开查看逐对关系和通俗含义", async () => {
+test("四柱八字只呈现关键关系连线并可点开通俗解释", async () => {
   const source = await readFile(new URL("../app/page.tsx", import.meta.url), "utf8");
   const styles = await readFile(new URL("../app/globals.css", import.meta.url), "utf8");
-  assert.match(source, /查看八字关系/);
   assert.match(source, /buildBaziRelations/);
   assert.match(source, /buildStemRelation/);
   assert.match(source, /buildBranchRelation/);
+  assert.match(source, /BaziRelationMap/);
+  assert.match(source, /只标出真正需要看的线/);
+  assert.match(source, /RelationDetail/);
   assert.match(source, /相害/);
   assert.match(source, /相刑/);
   assert.match(source, /半合/);
   assert.match(source, /半会/);
   assert.match(source, /不能单凭一个“合”或“冲”定好坏/);
-  assert.match(styles, /\.bazi-relations/);
-  assert.match(styles, /\.relation-item/);
+  assert.match(styles, /\.bazi-relation-map/);
+  assert.match(styles, /\.relation-map-link/);
 });
 
-test("每步大运按干支五行着色并可查看与八字的配合", async () => {
+test("每步大运按干支五行着色并以关键连线查看与八字的配合", async () => {
   const source = await readFile(new URL("../app/page.tsx", import.meta.url), "utf8");
   const styles = await readFile(new URL("../app/globals.css", import.meta.url), "utf8");
   assert.match(source, /function ColoredPillar/);
   assert.match(source, /buildFortuneCompatibility/);
   assert.match(source, /selectedFortuneIndex/);
   assert.match(source, /查看.*大运与八字的配合关系/);
-  assert.match(source, /放在一起怎么看/);
+  assert.match(source, /FortuneRelationMap/);
+  assert.match(source, /只显示这步大运与出生八字之间真正需要看的关键连线/);
+  assert.match(source, /这步运的总判/);
   assert.match(source, /出生八字/);
   assert.match(styles, /\.colored-pillar/);
-  assert.match(styles, /\.fortune-combo-panel/);
+  assert.match(styles, /\.fortune-relation-map/);
+  assert.match(styles, /\.fortune-relation-link/);
   assert.match(styles, /\.fortune-node\.selected/);
+});
+
+test("性格与三类主题都提供简明结论和建议", async () => {
+  const source = await readFile(new URL("../app/page.tsx", import.meta.url), "utf8");
+  assert.match(source, /buildPersonalitySummary/);
+  assert.match(source, /性格总判/);
+  assert.match(source, /label: "事业"/);
+  assert.match(source, /label: "财富"/);
+  assert.match(source, /label: "情感"/);
+  assert.match(source, /\{item\.label\}总判/);
+  assert.match(source, /结论：/);
 });
