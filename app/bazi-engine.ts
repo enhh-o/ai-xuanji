@@ -37,6 +37,16 @@ export function solarFromLunarDate(year: number, month: number, day: number, isL
 }
 
 /**
+ * 流年以立春换年。取当年 7 月 1 日可稳定落在该节气年内，避免把公历元旦误当流年分界。
+ */
+export function calculateAnnualPillar(year: number) {
+  const solar = Solar.fromYmdHms(year, 7, 1, 12, 0, 0);
+  const eightChar = solar.getLunar().getEightChar();
+  eightChar.setSect(2);
+  return eightChar.getYear();
+}
+
+/**
  * 与跃渊 Skill 的 bazi_engine.py 保持同一套 6tail 历法口径：
  * 使用校正后的本地真太阳时、节气精确四柱，且起运采用 sect=2 分钟级换算。
  */

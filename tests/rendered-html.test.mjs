@@ -63,17 +63,20 @@ test("紫微命盘以宫位聚焦与宫间连线呈现三方和对宫职责", as
   assert.match(styles, /\.palace-relation-line/);
 });
 
-test("三类关键转折按至少两层命盘信号筛选", async () => {
+test("三类关键转折只保留三层交叉验证且成年后的关系窗口", async () => {
   const source = await readFile(new URL("../app/page.tsx", import.meta.url), "utf8");
   const styles = await readFile(new URL("../app/globals.css", import.meta.url), "utf8");
-  assert.match(source, /signals\[kind\]\.length >= 2/);
-  assert.match(source, /calculateBazi\(`\$\{year\}-07-01`/);
-  assert.match(source, /annualStrongBalanceTrigger/);
+  assert.match(source, /calculateAnnualPillar\(year\)/);
+  assert.match(source, /luckNatalTrigger && \(annualHitsNatal \|\| annualHitsLuck\) && ziweiOverallTrigger/);
+  assert.match(source, /annualCareerTheme && careerPalaceTrigger/);
+  assert.match(source, /adultRelationshipWindow/);
+  assert.match(source, /age >= 18/);
+  assert.match(source, /spouseGods\.includes\(annualGod\)/);
+  assert.match(source, /\.slice\(0, 2\)/);
   assert.match(source, /annualSignals/);
   assert.match(source, /isCareerTurningPoint/);
   assert.match(source, /isRelationshipTurningPoint/);
   assert.match(source, /dayBranchClash/);
-  assert.match(source, /spouseGods\.includes\(fortuneGod\)/);
   assert.match(source, /className="overall"/);
   assert.match(source, /className="career"/);
   assert.match(source, /className="relationship"/);
@@ -87,8 +90,10 @@ test("三类关键转折按至少两层命盘信号筛选", async () => {
 test("判词避免夸张与恭维式话术", async () => {
   const source = await readFile(new URL("../app/page.tsx", import.meta.url), "utf8");
   assert.doesNotMatch(source, /优势容易被别人看见|机会可见|关系机会不弱|贵人资源成为关键/);
+  assert.doesNotMatch(source, /敏感但不软弱/);
   assert.match(source, /命盘给的是倾向/);
-  assert.match(source, /当前判断（C\/CORE/);
+  assert.match(source, /综合判断/);
+  assert.match(source, /personalityByGod/);
   assert.doesNotMatch(source, /扶身力量约占|扶身力量约/);
 });
 
@@ -102,7 +107,7 @@ test("默认使用女性示例并补足大运卡片信息", async () => {
   assert.match(styles, /\.turning-card-facts/);
 });
 
-test("四柱八字只呈现关键关系连线并可点开通俗解释", async () => {
+test("四柱八字只呈现关键关系的紧凑连线并可点开通俗解释", async () => {
   const source = await readFile(new URL("../app/page.tsx", import.meta.url), "utf8");
   const styles = await readFile(new URL("../app/globals.css", import.meta.url), "utf8");
   assert.match(source, /buildBaziRelations/);
@@ -110,6 +115,8 @@ test("四柱八字只呈现关键关系连线并可点开通俗解释", async ()
   assert.match(source, /buildBranchRelation/);
   assert.match(source, /BaziRelationMap/);
   assert.match(source, /只标出真正需要看的线/);
+  assert.match(source, /圆点只标位置，不重复写柱与干支/);
+  assert.match(source, /relation-map-markers/);
   assert.match(source, /RelationDetail/);
   assert.match(source, /相害/);
   assert.match(source, /相刑/);
@@ -118,6 +125,7 @@ test("四柱八字只呈现关键关系连线并可点开通俗解释", async ()
   assert.match(source, /不能单凭一个“合”或“冲”定好坏/);
   assert.match(styles, /\.bazi-relation-map/);
   assert.match(styles, /\.relation-map-link/);
+  assert.match(styles, /\.relation-map-compact/);
 });
 
 test("每步大运按干支五行着色并以关键连线查看与八字的配合", async () => {
@@ -145,7 +153,7 @@ test("性格与三类主题都提供简明结论和建议", async () => {
   assert.match(source, /label: "财富"/);
   assert.match(source, /label: "情感"/);
   assert.match(source, /\{item\.label\}总判/);
-  assert.match(source, /当前判断（C\/CORE/);
+  assert.match(source, /综合判断/);
 });
 
 test("四柱、农历换算与起运使用同源精确历法引擎", async () => {
@@ -156,8 +164,14 @@ test("四柱、农历换算与起运使用同源精确历法引擎", async () =>
   assert.match(engine, /eightChar\.getYun\(gender === "男" \? 1 : 0, 2\)/);
   assert.match(engine, /Array\.isArray\(stems\) \? stems\.join\(""\) : stems/);
   assert.match(engine, /solarFromLunarDate/);
+  assert.match(engine, /calculateAnnualPillar/);
   assert.match(page, /calculateBazi\(adjusted\.date, adjusted\.time, form\.gender\)/);
-  assert.match(page, /起运使用与四柱同源的 6tail 节气历法/);
+  assert.match(page, /起运使用与四柱同源的节气历法与子初换日规则/);
   assert.doesNotMatch(page, /function nextPillar/);
   assert.doesNotMatch(page, /function yearPillar/);
+});
+
+test("页面不向用户显示英文规则分层标签", async () => {
+  const html = await (await render()).text();
+  assert.doesNotMatch(html, /YOUR DESTINY MAP|ASK YOUR CHART|A\/STRUCTURAL|B\/STRUCTURAL|C\/CORE|>BAZI<|>ZI WEI</);
 });
