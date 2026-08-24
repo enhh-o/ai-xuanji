@@ -63,12 +63,14 @@ test("紫微命盘以宫位聚焦与宫间连线呈现三方和对宫职责", as
   assert.match(styles, /\.palace-relation-line/);
 });
 
-test("三类关键转折只保留三层交叉验证且成年后的关系窗口", async () => {
+test("三类关键转折使用大运阶段主题与流年触发，感情限成年", async () => {
   const source = await readFile(new URL("../app/page.tsx", import.meta.url), "utf8");
   const styles = await readFile(new URL("../app/globals.css", import.meta.url), "utf8");
   assert.match(source, /calculateAnnualPillar\(year\)/);
-  assert.match(source, /luckNatalTrigger && \(annualHitsNatal \|\| annualHitsLuck\) && ziweiOverallTrigger/);
-  assert.match(source, /annualCareerTheme && careerPalaceTrigger/);
+  assert.match(source, /overall: luckNatalTrigger && \(annualHitsNatal \|\| annualHitsLuck\)/);
+  assert.match(source, /career: careerFortuneTheme && annualCareerTheme && \(annualHitsNatal \|\| annualHitsLuck\)/);
+  assert.match(source, /relationship: adultRelationshipWindow && relationshipFortuneTheme && \(annualHitsDay \|\| spouseGods\.includes\(annualGod\)\)/);
+  assert.match(source, /紫微对应宫位用于判断变化更可能落在何处/);
   assert.match(source, /adultRelationshipWindow/);
   assert.match(source, /age >= 18/);
   assert.match(source, /spouseGods\.includes\(annualGod\)/);
@@ -115,17 +117,18 @@ test("四柱八字只呈现关键关系的紧凑连线并可点开通俗解释",
   assert.match(source, /buildBranchRelation/);
   assert.match(source, /BaziRelationMap/);
   assert.match(source, /只标出真正需要看的线/);
-  assert.match(source, /圆点只标位置，不重复写柱与干支/);
-  assert.match(source, /relation-map-markers/);
+  assert.match(source, /保留四柱干支本身；连线放在字的上、下方，不压住字/);
+  assert.match(source, /relation-map-pillars/);
+  assert.match(source, /relation-map-nodes/);
   assert.match(source, /RelationDetail/);
   assert.match(source, /相害/);
   assert.match(source, /相刑/);
   assert.match(source, /半合/);
   assert.match(source, /半会/);
-  assert.match(source, /不能单凭一个“合”或“冲”定好坏/);
+  assert.match(source, /它们不是吉凶判决/);
   assert.match(styles, /\.bazi-relation-map/);
   assert.match(styles, /\.relation-map-link/);
-  assert.match(styles, /\.relation-map-compact/);
+  assert.match(styles, /\.relation-map-pillars/);
 });
 
 test("每步大运按干支五行着色并以关键连线查看与八字的配合", async () => {

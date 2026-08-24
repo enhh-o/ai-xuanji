@@ -308,7 +308,7 @@ function buildBaziRelations(pillars: string[]) {
   const tensions = structural.filter((item) => item.tone === "tension");
   const supports = structural.filter((item) => item.tone === "support");
   const summary = structural.length
-    ? `四柱共有12组两两关系，其中较需要留意的结构关系有${structural.length}组：${supports.length ? `${supports.length}组偏向配合` : "没有明显配合结构"}，${tensions.length ? `${tensions.length}组带有拉扯或调整信号` : "没有明显拉扯结构"}。它们要结合喜忌、旺衰和现实经历一起看，不能单凭一个“合”或“冲”定好坏。`
+    ? `这里挑出了${structural.length}处会影响做事节奏、合作方式或关系边界的互动：${supports.length ? `${supports.length}处可借力` : "暂未见明显可借力处"}，${tensions.length ? `${tensions.length}处需要提前协调` : "暂未见明显拉扯处"}。它们不是吉凶判决，点击任一条就能看到它落在哪两柱、现实里该注意什么。`
     : "四柱之间没有明显的合、冲、刑、害、破或半合半会，主要看五行之间怎样相生、相克；这通常表示关系更偏日常积累，而不是强烈结构变化。";
   return { stemRelations, branchRelations: filteredBranchRelations, visualRelations: structural, summary };
 }
@@ -377,15 +377,21 @@ function buildAnalysis(pillars: string[], engine?: EngineBazi) {
   const hidden = pillars.map((pillar, index) => engine?.hiddenStems[index] || hiddenStem[pillar[1]] || "");
   const monthElement = elementOf[pillars[1]?.[1]] || "土";
   const rootBranches = pillars.map((pillar, index) => ({ branch: pillar[1], hidden: hidden[index] }));
-  const hasSelfOrPeerRoot = rootBranches.some((item) => item.hidden.split("").some((stem) => elementOf[stem] === dayElement));
-  const hasResourceRoot = rootBranches.some((item) => item.hidden.split("").some((stem) => elementOf[stem] === resource));
-  const hasSupportStem = pillars.some((pillar, index) => index !== 2 && [dayElement, resource].includes(elementOf[pillar[0]] || "土"));
-  const hasPressureStem = pillars.some((pillar, index) => index !== 2 && [output, wealth, officer].includes(elementOf[pillar[0]] || "土"));
+  const rootLocations = (target: ElementName) => rootBranches.flatMap((item, index) => [...new Set(item.hidden.split("").filter((stem) => elementOf[stem] === target))].map((stem) => `${pillarLabels[index]}${item.branch}藏${stem}`));
+  const selfRootDetails = rootLocations(dayElement);
+  const resourceRootDetails = rootLocations(resource);
+  const supportStemDetails = pillars.flatMap((pillar, index) => index !== 2 && [dayElement, resource].includes(elementOf[pillar[0]] || "土") ? [`${pillarLabels[index]}${pillar[0]}`] : []);
+  const pressureStemDetails = pillars.flatMap((pillar, index) => index !== 2 && [output, wealth, officer].includes(elementOf[pillar[0]] || "土") ? [`${pillarLabels[index]}${pillar[0]}`] : []);
+  const hasSelfOrPeerRoot = selfRootDetails.length > 0;
+  const hasResourceRoot = resourceRootDetails.length > 0;
+  const hasSupportStem = supportStemDetails.length > 0;
+  const hasPressureStem = pressureStemDetails.length > 0;
   const monthSupports = [dayElement, resource].includes(monthElement);
   const monthPressures = [output, wealth, officer].includes(monthElement);
+  const supportExists = hasSelfOrPeerRoot || hasResourceRoot || hasSupportStem;
   const strength = monthSupports && (hasSelfOrPeerRoot || hasSupportStem)
     ? "中和偏旺"
-    : monthPressures && !(hasSelfOrPeerRoot || hasResourceRoot || hasSupportStem)
+    : monthPressures && !supportExists
       ? "偏弱"
       : monthPressures ? "中和偏弱" : "中和";
   const favorable: ElementName[] = strength === "偏弱" || strength === "中和偏弱"
@@ -419,17 +425,25 @@ function buildAnalysis(pillars: string[], engine?: EngineBazi) {
     if (branchHarmonies[branch] === other) interactions.push(`${orderedPair}六合`);
   }));
   const evidence = [
-    `月令在${pillars[1]?.[1] || "—"}，对${dayStem}${dayElement}而言${monthSupports ? "偏向生扶" : monthPressures ? "带来泄耗或制约" : "不单边"}`,
-    hasSelfOrPeerRoot ? "地支可见日主同类根气" : "地支未见日主同类根气",
-    hasResourceRoot ? "地支有印星根气可作支持" : "印星根气不显",
-    hasSupportStem ? "天干另有印比帮扶" : "天干印比帮扶不显",
-    hasPressureStem ? "天干亦见泄耗或官财信号，需与根气一并判断" : "天干泄耗与官财信号不集中",
+    `月令：${pillars[1]?.[1] || "—"}${monthSupports ? `对${dayStem}${dayElement}有生扶作用` : monthPressures ? `让${dayStem}${dayElement}处在泄耗或受制的季节背景` : `对${dayStem}${dayElement}不偏向单边生扶或泄耗`}`,
+    selfRootDetails.length ? `根气：${selfRootDetails.join("、")}，日主并非全无依托` : "根气：地支未见日主同类根气",
+    resourceRootDetails.length ? `印星根气：${resourceRootDetails.join("、")}，可提供间接支持` : "印星根气：不显著",
+    supportStemDetails.length ? `天干支持：${supportStemDetails.join("、")}同属日主或印星` : "天干支持：未见明显印比帮扶",
+    pressureStemDetails.length ? `天干压力：${pressureStemDetails.join("、")}属泄、财或官杀，需和根气一起衡量` : "天干压力：泄、财、官杀没有集中透出",
   ];
-  const uncertainty = (monthSupports && monthPressures) || (hasSupportStem && hasPressureStem) ? "中" : "低";
+  const uncertainty = (monthPressures && supportExists) || (monthSupports && hasPressureStem) ? "中" : "低";
+  const strengthReason = monthPressures
+    ? `月令先让日主处于消耗背景；但${[selfRootDetails.length ? "地支有同类根气" : "地支同类根气不显", resourceRootDetails.length ? "印星有根" : "印星根气不显", supportStemDetails.length ? "天干另有印比相助" : "天干印比不显"].join("，")}，所以不直接定为“偏弱”，而暂定为“中和偏弱”。`
+    : monthSupports
+      ? `月令先给日主生扶，${supportExists ? "根气或天干也有呼应" : "但根气与天干支持仍有限"}，故暂定为${strength}。`
+      : `月令不单边，根气、天干支持与泄耗没有形成明显一边倒，故暂定为中和。`;
+  const uncertaintyReason = uncertainty === "中"
+    ? "月令带来消耗或制约，但根气、印比支持仍在；两组条件方向不同，所以保留中等程度的判断空间。"
+    : "月令、根气和天干支持的方向较一致，当前没有看到会反转喜忌方向的强烈冲突。";
   return {
     dayStem, dayElement, strength, favorable, avoid, tenGods, godCounts,
-    natalBranches, interactions: [...new Set(interactions)], evidence, uncertainty,
-    inputConfidence: "高" as const,
+    natalBranches, interactions: [...new Set(interactions)], evidence, uncertainty, strengthReason, uncertaintyReason,
+    inputConfidence: "较高" as const,
     engineEmpty: engine?.empty || { year: "已略", day: "已略" },
     changSheng: engine?.changSheng || "已略",
   };
@@ -471,6 +485,10 @@ function buildLuck(pillars: string[], gender: Gender, analysis: ReturnType<typeo
     const ziweiOverallTrigger = Boolean(decadalPalace && (changeStars.length || mutagens.length));
     const careerPalaceTrigger = Boolean(decadalPalace && ["官禄", "命宫", "迁移", "财帛"].some((name) => decadalPalace.name.includes(name)));
     const relationshipPalaceTrigger = Boolean(decadalPalace && ["夫妻", "命宫", "福德", "迁移"].some((name) => decadalPalace.name.includes(name)));
+    const careerFortuneTheme = careerPalaceTrigger || ["正官", "七杀", "食神", "伤官", "正财", "偏财"].includes(fortuneGod);
+    // 感情的“阶段主题”可由夫妻星、夫妻宫（日支）或紫微关系宫位之一带出；
+    // 仍须等流年再触及夫妻星或日支，才列为观察窗口，不能只凭一宫下结论。
+    const relationshipFortuneTheme = dayBranchClash || dayBranchHarmony || spouseGods.includes(fortuneGod) || relationshipPalaceTrigger;
     const careerGodMeanings: Record<string, string> = {
       正官: "正官透出，职位、责任与组织标准更容易成为主线", 七杀: "七杀透出，竞争、高压任务与快速决策增多",
       食神: "食神透出，专业产出、作品与口碑更容易兑现", 伤官: "伤官透出，创新、表达与职业换轨的需求增强",
@@ -524,38 +542,38 @@ function buildLuck(pillars: string[], gender: Gender, analysis: ReturnType<typeo
       const age = Math.max(0, Math.floor(source.startAge + yearIndex));
       const adultRelationshipWindow = age >= 18;
       const qualified: Record<TurningKind, boolean> = {
-        // 原局—大运有结构触发，流年再触发原局或大运，并由紫微大限中的变动星曜复核。
-        overall: luckNatalTrigger && (annualHitsNatal || annualHitsLuck) && ziweiOverallTrigger,
-        // 事业还必须有流年职业十神与事业相关大限共同到位，不能只因某一颗星就下结论。
-        career: luckNatalTrigger && (annualHitsNatal || annualHitsLuck) && annualCareerTheme && careerPalaceTrigger,
-        // 感情只收成年后的窗口，且要求大运、流年都直接触及日支，同时见配偶星与关系宫位。
-        relationship: adultRelationshipWindow && (dayBranchClash || dayBranchHarmony) && annualHitsDay && spouseGods.includes(annualGod) && relationshipPalaceTrigger,
+        // 先有大运与原局的阶段互动，再有流年触发；紫微用于解释这段变化主要落在哪个领域。
+        overall: luckNatalTrigger && (annualHitsNatal || annualHitsLuck),
+        // 事业必须同时具备运层职业主题、流年职业十神，以及岁运或流年对原局的触发。
+        career: careerFortuneTheme && annualCareerTheme && (annualHitsNatal || annualHitsLuck),
+        // 感情只从成年后看：大运先触及配偶星或夫妻宫，再由流年触及配偶星或日支。
+        relationship: adultRelationshipWindow && relationshipFortuneTheme && (annualHitsDay || spouseGods.includes(annualGod)),
       };
       const signals: Record<TurningKind, string[]> = {
         overall: [
-          luckNatalTrigger ? "大运与原局存在直接结构触发" : "",
-          annualHitsNatal ? "流年直接触及原局" : annualHitsLuck ? "流年直接触及大运" : "",
-          ziweiOverallTrigger ? "紫微大限同时见变动星曜或四化" : "",
+          luckNatalTrigger ? "大运先与出生盘形成互动" : "",
+          annualHitsNatal ? "流年再触及出生盘" : annualHitsLuck ? "流年再触及大运" : "",
+          ziweiOverallTrigger ? "紫微十年主题也见变化信号" : "",
           annualStrongBalanceTrigger ? "流年干支同时触及喜忌" : "",
         ].filter(Boolean),
         career: [
-          luckNatalTrigger ? "大运与原局存在结构触发" : "",
-          annualHitsNatal ? "流年直接触及原局" : annualHitsLuck ? "流年直接触及大运" : "",
-          annualCareerTheme ? "流年官杀或食伤被引动" : "",
-          careerPalaceTrigger ? "紫微大限落在事业相关宫位" : "",
+          careerFortuneTheme ? "大运先把工作、责任或收入议题带到前台" : "",
+          annualCareerTheme ? "流年再引动职位、表达或专业产出" : "",
+          annualHitsNatal ? "流年触及出生盘" : annualHitsLuck ? "流年触及大运" : "",
+          careerPalaceTrigger ? "紫微十年主题落在事业相关宫位" : "",
         ].filter(Boolean),
         relationship: [
           adultRelationshipWindow ? "已进入成年关系阶段" : "",
-          dayBranchClash || dayBranchHarmony ? "大运直接触及日支" : "",
-          annualHitsDay ? "流年直接触及日支" : "",
-          spouseGods.includes(annualGod) ? "配偶星被流年引动" : "",
-          relationshipPalaceTrigger ? "紫微大限触及关系主题" : "",
+          relationshipFortuneTheme ? "大运先带出夫妻星、日支或关系宫位主题" : "",
+          annualHitsDay ? "流年触及日支（夫妻宫）" : "",
+          spouseGods.includes(annualGod) ? "流年引动配偶星" : "",
+          relationshipPalaceTrigger ? "紫微十年主题也落在关系相关宫位" : "",
         ].filter(Boolean),
       };
       const reasons: Record<TurningKind, string> = {
-        overall: `${annualPillar}年同时与${pillar}大运、原局结构及紫微大限交叉核验，重点观察环境、职责或生活安排是否出现持续变化`,
-        career: `${annualPillar}年见${annualGod}，且流年触及原局或大运，重点核实岗位、职责、收入结构或项目方向是否发生可持续调整`,
-        relationship: `${annualPillar}年在成年阶段同时触及日支与配偶星，重点核实承诺、共同生活或关系边界是否出现实际变化`,
+        overall: `${pillar}运已与出生盘形成阶段互动，${annualPillar}年又${annualHitsNatal ? "触及原局" : "触及大运"}${ziweiOverallTrigger ? "，紫微十年主题也有变动提示" : ""}；这是整体节奏的重点观察窗口，不把它直接断成某一件事。`,
+        career: `${pillar}运先带出${fortuneGod}主题，${annualPillar}年见${annualGod}并${annualHitsNatal ? "触及原局" : "触及大运"}${careerPalaceTrigger ? "，紫微大限也指向事业相关领域" : ""}；重点核实岗位、职责、收入结构或项目方向是否出现持续调整。`,
+        relationship: `${pillar}运先${dayBranchClash ? `冲日支${dayBranch}` : dayBranchHarmony ? `合日支${dayBranch}` : spouseGods.includes(fortuneGod) ? `引动${fortuneGod}配偶星` : "进入紫微关系相关宫位主题"}，${annualPillar}年又${annualHitsDay ? `触及日支${dayBranch}` : `见${annualGod}配偶星`}${relationshipPalaceTrigger ? "，紫微十年主题也提示关系议题" : ""}；这是关系确认、协商或边界调整的观察窗口，不等同于直接断婚期。`,
       };
       return { year, pillar: annualPillar, signals, reasons, qualified };
     });
@@ -974,28 +992,37 @@ function relationImpact(item: RelationItem) {
 }
 
 function RelationDetail({ item, title = "这条关系怎么读" }: { item: RelationItem; title?: string }) {
+  const isFortuneDetail = title.includes("大运");
+  const plainMeaning = isFortuneDetail
+    ? `这一步运把大运${item.right}直接作用到原局的${item.leftLabel}${item.left}上。它只说明这十年里哪条原局线被推到前台，不重复解释出生八字内部的其他关系。`
+    : item.meaning;
   return <div className={`relation-detail ${item.tone}`}>
     <div><span>{title}</span><strong>{item.leftLabel}<b className={`element-${elementClass[elementOf[item.left] || "土"]}`}>{item.left}</b> · {item.rightLabel}<b className={`element-${elementClass[elementOf[item.right] || "土"]}`}>{item.right}</b></strong></div>
     <h4>{item.relation}</h4>
-    <p>{item.meaning}</p>
+    <p>{plainMeaning}</p>
     <em>{relationImpact(item)} {item.tone === "tension" ? "建议：重要决定留复核，先处理现实条件再处理情绪。" : "建议：把有利的配合落实到明确分工、时间表或可验证的成果。"}</em>
   </div>;
 }
 
-function BaziRelationMap({ pillars: _pillars, relations, selectedKey, onSelect }: { pillars: string[]; relations: RelationItem[]; selectedKey: string | null; onSelect: (key: string) => void }) {
+function BaziRelationMap({ pillars, relations, selectedKey, onSelect }: { pillars: string[]; relations: RelationItem[]; selectedKey: string | null; onSelect: (key: string) => void }) {
   if (!relations.length) return <p className="relation-empty">本盘没有需要特别标出的合、冲、刑、害、破或半合半会；重点放在五行强弱与日常取舍即可。</p>;
   return <div className="bazi-relation-map" aria-label="八字关键关系连线图">
-    <p>仅绘制有实际分量的关系；圆点只标位置，不重复写柱与干支。点击线中间的关系字查看解释。</p>
-    <div className="relation-map-canvas relation-map-compact">
+    <p>保留四柱干支本身；连线放在字的上、下方，不压住字。点击线中间的“合、冲、刑、害、破”查看它会影响哪一部分。</p>
+    <div className="relation-map-canvas relation-map-pillars">
       <span className="relation-map-row-label stem-row">天干</span><span className="relation-map-row-label branch-row">地支</span>
-      <div className="relation-map-markers" aria-hidden="true">
-        {["stem", "branch"].flatMap((layer) => Array.from({ length: 4 }, (_, index) => <i key={`${layer}-${index}`} className={layer} style={{ left: `${(index + .5) * 25}%` }} />))}
+      <div className="relation-map-nodes">
+        {pillars.map((pillar, index) => <div className="relation-map-node" key={`bazi-node-${index}`}>
+          <small>{pillarLabels[index]}</small>
+          <span className={`element-${elementClass[elementOf[pillar[0]] || "土"]}`}>{pillar[0]}</span>
+          <b className={`element-${elementClass[elementOf[pillar[1]] || "土"]}`}>{pillar[1]}</b>
+        </div>)}
       </div>
       {relations.map((item, index) => {
         const key = relationKey(item, "bazi");
         const from = ((item.leftIndex || 0) + .5) * 25;
         const to = ((item.rightIndex || 1) + .5) * 25;
-        const top = item.layer === "stem" ? 33 + (index % 3) * 7 : 73 + (index % 3) * 7;
+        // 天干线放在字的上方，地支线放在字的下方；三条线也保留各自的通道，不与干支重叠。
+        const top = item.layer === "stem" ? 10 + (index % 3) * 8 : 76 + (index % 3) * 9;
         return <button type="button" className={`relation-map-link ${item.tone} ${selectedKey === key ? "selected" : ""}`} key={key} style={{ left: `${from}%`, width: `${to - from}%`, top: `${top}%` }} aria-pressed={selectedKey === key} onClick={() => onSelect(key)}>
           <span>{shortRelationLabel(item)}</span>
         </button>;
@@ -1106,9 +1133,9 @@ export default function Home() {
   const careerTurningFortunes = fortunes.filter((fortune) => fortune.isCareerTurningPoint);
   const relationshipTurningFortunes = fortunes.filter((fortune) => fortune.isRelationshipTurningPoint);
   const turningGroups = [
-    { key: "overall", symbol: "全", title: "全盘关键转折", description: "看环境、角色与整体节奏的阶段变化；只保留多层信号同时成立的年份。", items: turningFortunes, years: turningFortunes.map((fortune) => fortune.annualSignals.overall) },
-    { key: "career", symbol: "业", title: "事业关键转折", description: "重点看职位、赛道、责任边界和收入结构；不因单一十神或星曜单独入选。", items: careerTurningFortunes, years: careerTurningFortunes.map((fortune) => fortune.annualSignals.career) },
-    { key: "relationship", symbol: "情", title: "感情关键转折", description: "只看成年后的承诺、相处结构与共同生活变化；未达条件不强行列年。", items: relationshipTurningFortunes, years: relationshipTurningFortunes.map((fortune) => fortune.annualSignals.relationship) },
+    { key: "overall", symbol: "全", title: "全盘关键转折", description: "大运先与出生盘形成互动，再由流年催动；看环境、角色与整体节奏的阶段变化。", items: turningFortunes, years: turningFortunes.map((fortune) => fortune.annualSignals.overall) },
+    { key: "career", symbol: "业", title: "事业关键转折", description: "运层先出现工作、责任或收入主题，流年再引动职位、表达或专业产出；不因单一星曜入选。", items: careerTurningFortunes, years: careerTurningFortunes.map((fortune) => fortune.annualSignals.career) },
+    { key: "relationship", symbol: "情", title: "感情关键转折", description: "只看成年后：大运先由配偶星、日支或紫微关系宫位带出主题，流年再触及配偶星或日支；用于观察确认、协商与边界变化。", items: relationshipTurningFortunes, years: relationshipTurningFortunes.map((fortune) => fortune.annualSignals.relationship) },
   ] as const;
   const progressFortunes = fortunes.filter((fortune) => fortune.mode === "进取");
   const cautiousFortunes = fortunes.filter((fortune) => fortune.mode === "蓄势");
@@ -1302,15 +1329,17 @@ export default function Home() {
             <div className="personality-conclusion"><b>{personalitySummary.verdict}</b><p>{personalitySummary.advice}</p></div>
           </article>
           <article className="strength-card">
-            <div className="article-title"><span>01</span><div><small>体用平衡</small><h3>{analysis.dayStem}{analysis.dayElement}日主 · {analysis.strength}</h3></div><b className="certainty-mark">{analysis.uncertainty}<small>不确定度</small></b></div>
-            <p>这里的“身强、身弱”说的是在这张命局里承受压力、调动资源的相对状态，不是身体好坏，也不是性格强弱。判断优先看出生月份，再看地支根气、天干帮扶与泄耗是否同向；它不适合被简化成一个固定百分比。当前为{analysis.strength}，{analysis.strength.includes("弱") ? "宜先把精力、能力和稳定支持补足，再扩大责任与投入。" : "宜用输出、取舍和规则，让结构保持可持续。"}</p>
+            <div className="article-title"><span>01</span><div><small>体用平衡</small><h3>{analysis.dayStem}{analysis.dayElement}日主 · {analysis.strength}</h3></div><b className="certainty-mark">{analysis.uncertainty === "中" ? "中等" : "较低"}<small>结论保留程度</small></b></div>
+            <p>这里的“身强、身弱”说的是在这张命局里承受压力、调动资源的相对状态，不是身体好坏，也不是性格强弱。判断先看出生月份，再看地支根气、天干帮扶与泄耗是否同向；它不适合被简化成固定百分比。{analysis.strengthReason}</p>
             <div className="evidence-list" aria-label="旺衰判断依据">
               {analysis.evidence.map((evidence, index) => <div key={evidence}><b>{index < 4 ? "原局依据" : "综合参考"}</b><span>{evidence}</span></div>)}
             </div>
             <div className="god-row"><span>用神 <b className={`element-${elementClass[analysis.favorable[0]]}`}>{analysis.favorable[0]}</b></span><span>喜神 <b className={`element-${elementClass[analysis.favorable[1]]}`}>{analysis.favorable[1]}</b></span><span>慎用 <b>{analysis.avoid.join("、")}</b></span></div>
             <div className="balance-insights">
-              <div><span>判断结论</span><strong>当前定为{analysis.strength}</strong><p>排盘资料完整度为高：出生时间、地点与真太阳时已参与定盘；结论仍需用现实经历核验。</p></div>
+              <div><span>判断结论</span><strong>当前定为{analysis.strength}</strong><p>{analysis.strengthReason}</p></div>
+              <div><span>为什么保留程度为{analysis.uncertainty === "中" ? "中等" : "较低"}</span><strong>{analysis.uncertainty === "中" ? "支持与消耗同时存在" : "主要条件方向较一致"}</strong><p>{analysis.uncertaintyReason}</p></div>
               <div><span>体用路径</span><strong>先用{analysis.favorable[0]}，再借{analysis.favorable[1]}</strong><p>{elementGuidance[analysis.favorable[0]].title}是主线，{elementGuidance[analysis.favorable[1]].title}用来辅助落地。</p></div>
+              <div><span>排盘资料</span><strong>完整度{analysis.inputConfidence}</strong><p>出生时间、地点与真太阳时已参与定盘；但出生时刻本身仍以填写资料为准，结论也需用现实经历核验。</p></div>
               <div><span>需要节制</span><strong>{analysis.avoid.join("、")}不宜再过度加码</strong><p>{analysis.interactions.length ? `出生八字又见${analysis.interactions.join("、")}，遇到相似的大运时应多留一次复核。` : "出生八字的合冲信号不重，更适合稳定积累，不必为了变化而变化。"}</p></div>
             </div>
           </article>
@@ -1363,10 +1392,10 @@ export default function Home() {
           <div><span>◇</span><h3>判断方式</h3><p>“进取、稳进、蓄势”是把大运五行是否有助于平衡，与紫微这十年的宫位和星曜放在一起比较；“关键转折”表示变化信号较集中，不按固定年龄贴标签。</p></div>
         </div>
         <div className="turning-detail">
-          <div><span>八字与紫微一起看 · 三类转折</span><h3>关键转折的依据与建议</h3><p>只收录“原局与大运有结构触发、流年再次触及、紫微对应领域复核”三层同时成立的窗口；每类最多两处。感情类仅从成年阶段起看，不代表一定发生好事或坏事。</p></div>
+          <div><span>八字与紫微一起看 · 三类转折</span><h3>关键转折的依据与建议</h3><p>“关键转折”不是把某年直接断成某件事，而是大运先定阶段主题、流年再给出触发点；紫微对应宫位用于判断变化更可能落在何处。每类只保留最清楚的两处，感情类仅从成年阶段起看。</p></div>
           <div className="turning-groups">
             {turningGroups.map((group) => <section className={`turning-group ${group.key}`} key={group.key}>
-              <header><i>{group.symbol}</i><div><span>{group.title}</span><p>{group.description}</p>{group.years.length ? <div className="turning-year-list"><small>重点年份 · 以立春为界</small>{group.years.map((signal) => <div key={`${group.key}-${signal.year}`}><b>{signal.year}</b><span>{signal.pillar} · {signal.reason}</span></div>)}</div> : <p className="turning-empty">未见同时满足三层依据的关键窗口，本栏不强行输出年份。</p>}</div></header>
+              <header><i>{group.symbol}</i><div><span>{group.title}</span><p>{group.description}</p>{group.years.length ? <div className="turning-year-list"><small>重点年份 · 以立春为界</small>{group.years.map((signal) => <div key={`${group.key}-${signal.year}`}><b>{signal.year}</b><span>{signal.pillar} · {signal.reason}</span></div>)}</div> : <p className="turning-empty">未见同时具备阶段主题和流年触发的清楚窗口，本栏不强行输出年份。</p>}</div></header>
               <div className="turning-cards">
                 {group.items.length ? group.items.map((fortune) => {
                   const reasons = group.key === "career" ? fortune.careerReasons : group.key === "relationship" ? fortune.relationshipReasons : fortune.turnReasons;
