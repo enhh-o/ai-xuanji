@@ -63,15 +63,18 @@ test("紫微命盘以宫位聚焦与宫间连线呈现三方和对宫职责", as
   assert.match(styles, /\.palace-relation-line/);
 });
 
-test("三类关键转折使用大运阶段主题与流年触发，感情限成年", async () => {
+test("三类关键转折使用原局大运流年链，事业与感情均限成年", async () => {
   const source = await readFile(new URL("../app/page.tsx", import.meta.url), "utf8");
   const styles = await readFile(new URL("../app/globals.css", import.meta.url), "utf8");
   assert.match(source, /calculateAnnualPillar\(year\)/);
   assert.match(source, /overall: luckNatalTrigger && \(annualHitsNatal \|\| annualHitsLuck\)/);
-  assert.match(source, /career: careerFortuneTheme && annualCareerTheme && \(annualHitsNatal \|\| annualHitsLuck\)/);
+  assert.match(source, /career: adultCareerWindow && careerFortuneTheme && annualCareerTheme && \(annualHitsMonth \|\| \(luckHitsMonth && annualHitsLuck\)\)/);
   assert.match(source, /relationship: adultRelationshipWindow && relationshipFortuneTheme && \(annualHitsDay \|\| spouseGods\.includes\(annualGod\)\)/);
   assert.match(source, /紫微对应宫位用于判断变化更可能落在何处/);
   assert.match(source, /adultRelationshipWindow/);
+  assert.match(source, /adultCareerWindow/);
+  assert.match(source, /annualHitsMonth/);
+  assert.match(source, /luckHitsMonth/);
   assert.match(source, /age >= 18/);
   assert.match(source, /spouseGods\.includes\(annualGod\)/);
   assert.match(source, /\.slice\(0, 2\)/);
@@ -116,19 +119,22 @@ test("四柱八字只呈现关键关系的紧凑连线并可点开通俗解释",
   assert.match(source, /buildStemRelation/);
   assert.match(source, /buildBranchRelation/);
   assert.match(source, /BaziRelationMap/);
-  assert.match(source, /只标出真正需要看的线/);
-  assert.match(source, /保留四柱干支本身；连线放在字的上、下方，不压住字/);
+  assert.match(source, /干支之间的互动/);
+  assert.doesNotMatch(source, /只标出真正需要看的线|连线放在字的上、下方|只画出这步大运/);
   assert.match(source, /relation-map-pillars/);
   assert.match(source, /relation-map-nodes/);
+  assert.match(source, /relation-end-left/);
+  assert.match(source, /relation-end-right/);
   assert.match(source, /RelationDetail/);
   assert.match(source, /相害/);
   assert.match(source, /相刑/);
   assert.match(source, /半合/);
   assert.match(source, /半会/);
-  assert.match(source, /它们不是吉凶判决/);
+  assert.match(source, /关系本身不直接等同于吉凶/);
   assert.match(styles, /\.bazi-relation-map/);
   assert.match(styles, /\.relation-map-link/);
   assert.match(styles, /\.relation-map-pillars/);
+  assert.match(styles, /\.relation-map-row \.relation-end/);
 });
 
 test("每步大运按干支五行着色并以关键连线查看与八字的配合", async () => {
@@ -139,13 +145,20 @@ test("每步大运按干支五行着色并以关键连线查看与八字的配�
   assert.match(source, /selectedFortuneIndex/);
   assert.match(source, /查看.*大运与八字的配合关系/);
   assert.match(source, /FortuneRelationMap/);
-  assert.match(source, /只显示这步大运与出生八字之间真正需要看的关键连线/);
+  assert.doesNotMatch(source, /只显示这步大运与出生八字之间真正需要看的关键连线/);
   assert.match(source, /这步运的总判/);
   assert.match(source, /出生八字/);
   assert.match(styles, /\.colored-pillar/);
   assert.match(styles, /\.fortune-relation-map/);
   assert.match(styles, /\.fortune-relation-link/);
   assert.match(styles, /\.fortune-node\.selected/);
+});
+
+test("旺衰区域不显示过程性保留说明与资料完整度卡片", async () => {
+  const source = await readFile(new URL("../app/page.tsx", import.meta.url), "utf8");
+  assert.doesNotMatch(source, /为什么保留程度为|排盘资料|完整度较高/);
+  assert.match(source, /判断结论/);
+  assert.match(source, /体用路径/);
 });
 
 test("性格与三类主题都提供简明结论和建议", async () => {
