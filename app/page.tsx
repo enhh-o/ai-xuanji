@@ -1,7 +1,8 @@
 "use client";
 
-import { FormEvent, useMemo, useRef, useState } from "react";
+import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { provinces } from "./china-cities";
+import { calculateBazi, solarFromLunarDate, type EngineBazi } from "./bazi-engine";
 
 type Gender = "男" | "女";
 type CalendarKind = "solar" | "lunar";
@@ -275,29 +276,72 @@ function buildBaziRelations(pillars: string[]) {
     stemRelations.push({ ...buildStemRelation(pillar[0], other[0], `${pillarLabels[leftIndex]}天干`, `${pillarLabels[rightIndex]}天干`), leftIndex, rightIndex, layer: "stem" });
     branchRelations.push({ ...buildBranchRelation(pillar[1], other[1], `${pillarLabels[leftIndex]}地支`, `${pillarLabels[rightIndex]}地支`), leftIndex, rightIndex, layer: "branch" });
   }));
-  const all = [...stemRelations, ...branchRelations];
+  const natalBranches = pillars.map((pillar) => pillar[1]);
+  const completeGroups = [
+    ...harmonyGroups.map((group) => ({ ...group, kind: "三合" as const })),
+    ...meetingGroups.map((group) => ({ ...group, kind: "三会" as const })),
+  ].filter((group) => group.members.every((branch) => natalBranches.includes(branch)));
+  const completeGroupRelations: RelationItem[] = completeGroups.map((group) => {
+    const indexes = group.members.map((branch) => natalBranches.indexOf(branch)).filter((index) => index >= 0);
+    const leftIndex = Math.min(...indexes);
+    const rightIndex = Math.max(...indexes);
+    return {
+      leftLabel: "原局地支",
+      left: natalBranches[leftIndex],
+      rightLabel: "原局地支",
+      right: natalBranches[rightIndex],
+      relation: `${group.members.join("")}${group.kind}${group.element}局`,
+      meaning: `原局地支已凑齐${group.members.join("、")}，形成${group.kind}${group.element}局的结构信号。它说明${group.element}的主题更集中，但是否真正化成单一力量，仍须结合月令、透干与全盘制化，不能只凭成局断吉凶。`,
+      tone: "support",
+      structural: true,
+      leftIndex,
+      rightIndex,
+      layer: "branch",
+    };
+  });
+  const filteredBranchRelations = branchRelations.filter((item) => !completeGroups.some((group) => {
+    const isSameGroupPair = group.members.includes(item.left) && group.members.includes(item.right);
+    return isSameGroupPair && item.relation.includes(`半${group.kind.slice(1)}${group.element}`);
+  }));
+  const all = [...stemRelations, ...filteredBranchRelations, ...completeGroupRelations];
   const structural = all.filter((item) => item.structural);
   const tensions = structural.filter((item) => item.tone === "tension");
   const supports = structural.filter((item) => item.tone === "support");
   const summary = structural.length
     ? `四柱共有12组两两关系，其中较需要留意的结构关系有${structural.length}组：${supports.length ? `${supports.length}组偏向配合` : "没有明显配合结构"}，${tensions.length ? `${tensions.length}组带有拉扯或调整信号` : "没有明显拉扯结构"}。它们要结合喜忌、旺衰和现实经历一起看，不能单凭一个“合”或“冲”定好坏。`
     : "四柱之间没有明显的合、冲、刑、害、破或半合半会，主要看五行之间怎样相生、相克；这通常表示关系更偏日常积累，而不是强烈结构变化。";
-  return { stemRelations, branchRelations, visualRelations: structural, summary };
+  return { stemRelations, branchRelations: filteredBranchRelations, visualRelations: structural, summary };
 }
 
-function completedBranchGroups(natalBranches: string[], fortuneBranch: string) {
+function completedBranchGroupDetails(natalBranches: string[], fortuneBranch: string) {
   const present = new Set([...natalBranches, fortuneBranch]);
   return [
-    ...harmonyGroups.filter((group) => group.members.includes(fortuneBranch) && group.members.every((branch) => present.has(branch))).map((group) => `${group.members.join("")}三合${group.element}局`),
-    ...meetingGroups.filter((group) => group.members.includes(fortuneBranch) && group.members.every((branch) => present.has(branch))).map((group) => `${group.members.join("")}三会${group.element}局`),
+    ...harmonyGroups.filter((group) => group.members.includes(fortuneBranch) && group.members.every((branch) => present.has(branch))).map((group) => ({ ...group, kind: "三合" as const })),
+    ...meetingGroups.filter((group) => group.members.includes(fortuneBranch) && group.members.every((branch) => present.has(branch))).map((group) => ({ ...group, kind: "三会" as const })),
   ];
 }
 
 function buildFortuneCompatibility(pillars: string[], fortunePillar: string, analysis: ReturnType<typeof buildAnalysis>) {
   const stemRelations = pillars.map((pillar, index) => ({ ...buildStemRelation(pillar[0], fortunePillar[0], `${pillarLabels[index]}天干`, "大运天干"), leftIndex: index, layer: "stem" as const }));
   const branchRelations = pillars.map((pillar, index) => ({ ...buildBranchRelation(pillar[1], fortunePillar[1], `${pillarLabels[index]}地支`, "大运地支"), leftIndex: index, layer: "branch" as const }));
-  const structural = branchRelations.filter((item) => item.structural);
-  const completed = completedBranchGroups(analysis.natalBranches, fortunePillar[1]);
+  const completed = completedBranchGroupDetails(analysis.natalBranches, fortunePillar[1]);
+  const structural = branchRelations.filter((item) => item.structural && !completed.some((group) => group.members.includes(item.left) && group.members.includes(fortunePillar[1]) && item.relation.includes(`半${group.kind.slice(1)}${group.element}`)));
+  const completedRelations: RelationItem[] = completed.map((group) => {
+    const natalMember = group.members.find((branch) => branch !== fortunePillar[1] && analysis.natalBranches.includes(branch)) || fortunePillar[1];
+    const leftIndex = analysis.natalBranches.indexOf(natalMember);
+    return {
+      leftLabel: "原局地支",
+      left: natalMember,
+      rightLabel: "大运地支",
+      right: fortunePillar[1],
+      relation: `${group.members.join("")}${group.kind}${group.element}局`,
+      meaning: `大运${fortunePillar[1]}加入后，原局已具的${group.members.filter((branch) => branch !== fortunePillar[1]).join("、")}与它凑齐${group.kind}${group.element}局。${group.element}主题会更集中，但成局不等于某件事必然发生，仍要看月令、透干、喜忌与现实条件。`,
+      tone: "support",
+      structural: true,
+      leftIndex,
+      layer: "branch",
+    };
+  });
   const fortuneGod = tenGod(analysis.dayStem, fortunePillar[0]);
   const fortuneElements = [elementOf[fortunePillar[0]] || "土", elementOf[fortunePillar[1]] || "土"];
   const helpful = fortuneElements.filter((element) => analysis.favorable.includes(element));
@@ -311,46 +355,50 @@ function buildFortuneCompatibility(pillars: string[], fortunePillar: string, ana
   const structureText = structuralNames.length
     ? `地支较明显的互动是${structuralNames.join("；")}。`
     : "大运地支与出生八字没有明显合冲刑害破，影响更像缓慢叠加。";
-  const groupText = completed.length ? `大运加入后还凑齐${completed.join("、")}，相关五行主题会更集中，但能否形成稳定力量仍要看全盘强弱和现实条件。` : "大运没有额外凑齐完整的三合或三会。";
+  const groupText = completed.length ? `大运加入后还凑齐${completed.map((group) => `${group.members.join("")}${group.kind}${group.element}局`).join("、")}，相关五行主题会更集中，但能否形成稳定力量仍要看全盘强弱和现实条件。` : "大运没有额外凑齐完整的三合或三会。";
   const tensionCount = [...stemRelations, ...branchRelations].filter((item) => item.tone === "tension").length;
   const conclusion = tensionCount >= 4
     ? "共同来看，这一步的调整信号多于顺滑信号。适合把变化拆成小步骤，先核实合同、现金流、关系边界和身体承受度。"
     : "共同来看，这一步有可以借力的地方，也仍有需要校准的环节。先把目标说具体，再用阶段结果决定是否继续加码。";
   return {
     stemRelations, branchRelations, fortuneGod,
-    visualRelations: [...stemRelations, ...branchRelations].filter((item) => item.structural),
+    visualRelations: [...stemRelations.filter((item) => item.structural), ...structural, ...completedRelations],
     summary: `大运天干${fortunePillar[0]}对日主${analysis.dayStem}来说是${fortuneGod}。${balanceText}${structureText}${groupText}${conclusion}`,
   };
 }
 
-function buildAnalysis(pillars: string[]) {
+function buildAnalysis(pillars: string[], engine?: EngineBazi) {
   const dayStem = pillars[2]?.[0] || "庚";
   const dayElement = elementOf[dayStem] || "金";
-  const scores: Record<ElementName, number> = { 木: 0, 火: 0, 土: 0, 金: 0, 水: 0 };
-  pillars.forEach((pillar, index) => {
-    const stemEl = elementOf[pillar[0]];
-    const branchEl = elementOf[pillar[1]];
-    if (stemEl) scores[stemEl] += 12;
-    if (branchEl) scores[branchEl] += index === 1 ? 25 : 14;
-    (hiddenStem[pillar[1]] || "").split("").forEach((stem, hiddenIndex) => {
-      const el = elementOf[stem];
-      if (el) scores[el] += hiddenIndex === 0 ? 5 : 2;
-    });
-  });
   const resource = (Object.keys(produces) as ElementName[]).find((key) => produces[key] === dayElement) || "土";
-  const support = scores[dayElement] + scores[resource];
-  const total = Object.values(scores).reduce((a, b) => a + b, 0) || 1;
-  const ratio = support / total;
-  const strength = ratio > 0.62 ? "身强" : ratio < 0.38 ? "身弱" : "中和偏旺";
-  const favorable = strength === "身弱" ? [resource, dayElement] : [produces[dayElement], controls[dayElement]];
-  const avoid = (Object.keys(scores) as ElementName[]).filter((el) => !favorable.includes(el)).sort((a, b) => scores[b] - scores[a]).slice(0, 2);
-  const max = Math.max(...Object.values(scores), 1);
-  const normalized = (Object.keys(scores) as ElementName[]).map((name) => ({ name, value: Math.round((scores[name] / max) * 100), raw: scores[name] }));
+  const output = produces[dayElement];
+  const wealth = controls[dayElement];
+  const officer = (Object.keys(controls) as ElementName[]).find((key) => controls[key] === dayElement) || "水";
+  const hidden = pillars.map((pillar, index) => engine?.hiddenStems[index] || hiddenStem[pillar[1]] || "");
+  const monthElement = elementOf[pillars[1]?.[1]] || "土";
+  const rootBranches = pillars.map((pillar, index) => ({ branch: pillar[1], hidden: hidden[index] }));
+  const hasSelfOrPeerRoot = rootBranches.some((item) => item.hidden.split("").some((stem) => elementOf[stem] === dayElement));
+  const hasResourceRoot = rootBranches.some((item) => item.hidden.split("").some((stem) => elementOf[stem] === resource));
+  const hasSupportStem = pillars.some((pillar, index) => index !== 2 && [dayElement, resource].includes(elementOf[pillar[0]] || "土"));
+  const hasPressureStem = pillars.some((pillar, index) => index !== 2 && [output, wealth, officer].includes(elementOf[pillar[0]] || "土"));
+  const monthSupports = [dayElement, resource].includes(monthElement);
+  const monthPressures = [output, wealth, officer].includes(monthElement);
+  const strength = monthSupports && (hasSelfOrPeerRoot || hasSupportStem)
+    ? "中和偏旺"
+    : monthPressures && !(hasSelfOrPeerRoot || hasResourceRoot || hasSupportStem)
+      ? "偏弱"
+      : monthPressures ? "中和偏弱" : "中和";
+  const favorable: ElementName[] = strength === "偏弱" || strength === "中和偏弱"
+    ? [resource, dayElement]
+    : strength === "中和偏旺" ? [output, wealth] : [output, wealth];
+  const avoid = (strength === "偏弱" || strength === "中和偏弱")
+    ? [officer, wealth].filter((element, index, all) => all.indexOf(element) === index)
+    : [dayElement, resource].filter((element, index, all) => all.indexOf(element) === index);
   const tenGods = pillars.map((pillar, index) => ({
     label: ["年柱", "月柱", "日柱", "时柱"][index],
-    god: index === 2 ? "日主" : tenGod(dayStem, pillar[0]),
+    god: engine?.tenGods[index] || (index === 2 ? "日主" : tenGod(dayStem, pillar[0])),
     element: elementOf[pillar[0]] || dayElement,
-    hidden: hiddenStem[pillar[1]] || "—",
+    hidden: hidden[index] || "—",
   }));
   const godCounts: Record<string, number> = {};
   pillars.forEach((pillar, index) => {
@@ -358,9 +406,9 @@ function buildAnalysis(pillars: string[]) {
       const god = tenGod(dayStem, pillar[0]);
       godCounts[god] = (godCounts[god] || 0) + 1;
     }
-    (hiddenStem[pillar[1]] || "").split("").forEach((stem, hiddenIndex) => {
+    [...new Set(hidden[index].split(""))].forEach((stem) => {
       const god = tenGod(dayStem, stem);
-      godCounts[god] = (godCounts[god] || 0) + (hiddenIndex === 0 ? 0.7 : 0.35);
+      godCounts[god] = (godCounts[god] || 0) + 1;
     });
   });
   const natalBranches = pillars.map((pillar) => pillar[1]).filter(Boolean);
@@ -370,63 +418,27 @@ function buildAnalysis(pillars: string[]) {
     if (branchClashes[branch] === other) interactions.push(`${orderedPair}相冲`);
     if (branchHarmonies[branch] === other) interactions.push(`${orderedPair}六合`);
   }));
-  const rankedElements = (Object.keys(scores) as ElementName[]).sort((a, b) => scores[b] - scores[a]);
+  const evidence = [
+    `月令在${pillars[1]?.[1] || "—"}，对${dayStem}${dayElement}而言${monthSupports ? "偏向生扶" : monthPressures ? "带来泄耗或制约" : "不单边"}`,
+    hasSelfOrPeerRoot ? "地支可见日主同类根气" : "地支未见日主同类根气",
+    hasResourceRoot ? "地支有印星根气可作支持" : "印星根气不显",
+    hasSupportStem ? "天干另有印比帮扶" : "天干印比帮扶不显",
+    hasPressureStem ? "天干亦见泄耗或官财信号，需与根气一并判断" : "天干泄耗与官财信号不集中",
+  ];
+  const uncertainty = (monthSupports && monthPressures) || (hasSupportStem && hasPressureStem) ? "中" : "低";
   return {
-    dayStem, dayElement, scores, normalized, strength, ratio, favorable, avoid, tenGods, godCounts,
-    natalBranches, interactions: [...new Set(interactions)], dominantElement: rankedElements[0], weakestElement: rankedElements[rankedElements.length - 1],
+    dayStem, dayElement, strength, favorable, avoid, tenGods, godCounts,
+    natalBranches, interactions: [...new Set(interactions)], evidence, uncertainty,
+    inputConfidence: "S3" as const,
+    engineEmpty: engine?.empty || { year: "已略", day: "已略" },
+    changSheng: engine?.changSheng || "已略",
   };
 }
 
-function nextPillar(pillar: string, direction: number, step: number) {
-  const stem = stems[(stems.indexOf(pillar[0]) + direction * step + 100) % 10];
-  const branch = branches[(branches.indexOf(pillar[1]) + direction * step + 120) % 12];
-  return `${stem}${branch}`;
-}
-
-function yearPillar(year: number) {
-  const index = ((year - 4) % 60 + 60) % 60;
-  return `${stems[index % 10]}${branches[index % 12]}`;
-}
-
-const solarTermMinutes = [
-  0, 21208, 42467, 63836, 85337, 107014, 128867, 150921, 173149, 195551, 218072, 240693,
-  263343, 285989, 308563, 331033, 353350, 375494, 397447, 419210, 440795, 462224, 483532, 504758,
-];
-const solarTermNames = [
-  "小寒", "大寒", "立春", "雨水", "惊蛰", "春分", "清明", "谷雨", "立夏", "小满", "芒种", "夏至",
-  "小暑", "大暑", "立秋", "处暑", "白露", "秋分", "寒露", "霜降", "立冬", "小雪", "大雪", "冬至",
-];
-const jieIndexes = new Set([0, 2, 4, 6, 8, 10, 12, 14, 16, 18, 20, 22]);
-const dayMs = 86400000;
-
-function wallTimeMs(date: string, time: string) {
-  const [year, month, day] = date.split("-").map(Number);
-  const [hour, minute] = time.split(":").map(Number);
-  return Date.UTC(year, month - 1, day, hour, minute);
-}
-
-function solarTermsForYear(year: number) {
-  const base = Date.UTC(1900, 0, 6, 2, 5);
-  return solarTermMinutes.map((minutes, index) => ({
-    name: solarTermNames[index],
-    // 通用定气算法先得到 UTC 时刻，再加八小时转为中国标准时间的“墙上时间”。
-    time: base + 31556925974.7 * (year - 1900) + minutes * 60000 + 8 * 3600000,
-    isJie: jieIndexes.has(index),
-  }));
-}
-
-function formatWallDate(time: number, withTime = false) {
-  const value = new Date(time);
-  const date = `${value.getUTCFullYear()}年${pad(value.getUTCMonth() + 1)}月${pad(value.getUTCDate())}日`;
-  return withTime ? `${date} ${pad(value.getUTCHours())}:${pad(value.getUTCMinutes())}` : date;
-}
-
-function formatStartAge(yearsFloat: number) {
-  const years = Math.floor(yearsFloat);
-  const monthsFloat = (yearsFloat - years) * 12;
-  const months = Math.floor(monthsFloat);
-  const days = Math.round((monthsFloat - months) * 30.44);
-  return `${years}年${months}个月${days}天`;
+function formatEngineStart(start: EngineBazi["start"]) {
+  const parts = [`${start.years}年`, `${start.months}个月`, `${start.days}天`];
+  if (start.hours) parts.push(`${start.hours}小时`);
+  return parts.join("");
 }
 
 function palaceStars(palace?: Palace) {
@@ -434,32 +446,14 @@ function palaceStars(palace?: Palace) {
   return stars.map((star) => `${star.name}${star.brightness ? `·${star.brightness}` : ""}${star.mutagen ? `·化${star.mutagen}` : ""}`).join("、") || "空宫借对宫";
 }
 
-function buildLuck(pillars: string[], gender: Gender, solar: ReturnType<typeof trueSolarTime>, analysis: ReturnType<typeof buildAnalysis>, chart: Astrolabe) {
-  const yearStemIndex = stems.indexOf(pillars[0]?.[0] || "庚");
-  const forward = (yearStemIndex % 2 === 0 && gender === "男") || (yearStemIndex % 2 === 1 && gender === "女");
-  const direction = forward ? 1 : -1;
-  const birthTime = wallTimeMs(solar.date, solar.time);
-  const birthYear = new Date(birthTime).getUTCFullYear();
-  const jie = [birthYear - 1, birthYear, birthYear + 1]
-    .flatMap(solarTermsForYear)
-    .filter((item) => item.isJie)
-    .sort((a, b) => a.time - b.time);
-  const selectedJie = forward
-    ? jie.find((item) => item.time > birthTime) || jie[jie.length - 1]
-    : [...jie].reverse().find((item) => item.time <= birthTime) || jie[0];
-  const distanceDays = Math.abs(selectedJie.time - birthTime) / dayMs;
-  // 子平法通行换算：三日折一年，一日折四个月；由实际节气距离推导起运日。
-  const startAgeYears = distanceDays / 3;
-  const startTime = birthTime + startAgeYears * 365.2422 * dayMs;
-  const startYear = new Date(startTime).getUTCFullYear();
-  const draftFortunes = Array.from({ length: 8 }, (_, index) => {
-    const age = startAgeYears + index * 10;
-    const pillar = nextPillar(pillars[1] || "戊子", direction, index + 1);
+function buildLuck(pillars: string[], gender: Gender, analysis: ReturnType<typeof buildAnalysis>, chart: Astrolabe, engine: EngineBazi) {
+  const draftFortunes = engine.fortunes.slice(0, 8).map((source, index) => {
+    const { pillar, startYear, endYear } = source;
     const stemElement = elementOf[pillar[0]] || "土";
     const branchElement = elementOf[pillar[1]] || "土";
     const clashes = [...new Set(analysis.natalBranches.filter((branch) => branchClashes[pillar[1]] === branch))];
     const harmonies = [...new Set(analysis.natalBranches.filter((branch) => branchHarmonies[pillar[1]] === branch))];
-    const midpointAge = age + 5;
+    const midpointAge = source.startAge + 4;
     const decadalPalace = chart.palaces.find((palace) => {
       const range = palace.decadal?.range;
       return range && midpointAge >= range[0] && midpointAge <= range[1];
@@ -467,14 +461,12 @@ function buildLuck(pillars: string[], gender: Gender, solar: ReturnType<typeof t
     const majorStars = decadalPalace?.majorStars || [];
     const mutagens = majorStars.filter((star) => star.mutagen).map((star) => `${star.name}化${star.mutagen}`);
     const changeStars = majorStars.filter((star) => ["七杀", "破军", "贪狼", "廉贞"].includes(star.name)).map((star) => star.name);
-    const supportiveStars = majorStars.filter((star) => ["紫微", "天府", "天相", "天梁", "武曲"].includes(star.name)).map((star) => star.name);
     const relationshipStars = majorStars.filter((star) => ["天机", "太阴", "天同", "廉贞", "贪狼", "巨门"].includes(star.name)).map((star) => star.name);
     const fortuneGod = tenGod(analysis.dayStem, pillar[0]);
     const dayBranch = analysis.natalBranches[2];
     const dayBranchClash = Boolean(dayBranch && branchClashes[pillar[1]] === dayBranch);
     const dayBranchHarmony = Boolean(dayBranch && branchHarmonies[pillar[1]] === dayBranch);
     const spouseGods = gender === "男" ? ["正财", "偏财"] : ["正官", "七杀"];
-    const careerGodWeights: Record<string, number> = { 正官: 4, 七杀: 4, 食神: 2.5, 伤官: 2.5, 正印: 2, 偏印: 2, 正财: 1.5, 偏财: 1.5, 比肩: 1, 劫财: 1 };
     const careerGodMeanings: Record<string, string> = {
       正官: "正官透出，职位、责任与组织标准更容易成为主线", 七杀: "七杀透出，竞争、高压任务与快速决策增多",
       食神: "食神透出，专业产出、作品与口碑更容易兑现", 伤官: "伤官透出，创新、表达与职业换轨的需求增强",
@@ -482,24 +474,9 @@ function buildLuck(pillars: string[], gender: Gender, solar: ReturnType<typeof t
       正财: "正财透出，收入结构、客户与稳定回报成为重点", 偏财: "偏财透出，市场变化、资源整合与多元收入议题增多",
       比肩: "比肩透出，同行协作与职业自主性同时上升", 劫财: "劫财透出，团队重组、合伙分配与同行竞争需要说清",
     };
-    let quality = 0;
-    if (analysis.favorable.includes(stemElement)) quality += 2;
-    if (analysis.favorable.includes(branchElement)) quality += 1;
-    if (analysis.avoid.includes(stemElement)) quality -= 2;
-    if (analysis.avoid.includes(branchElement)) quality -= 1;
-    quality += supportiveStars.length;
-    if (mutagens.some((item) => item.endsWith("化忌"))) quality -= 2;
-    if (mutagens.some((item) => /化禄|化权|化科/.test(item))) quality += 1;
-    const mode = quality >= 2 ? "进取" : quality <= -2 ? "蓄势" : "稳进";
-    const turnScore = clashes.length * 4 + harmonies.length * 1.5 + changeStars.length * 2 + mutagens.length * 2
-      + (decadalPalace && ["命宫", "官禄", "财帛", "夫妻", "迁移"].some((name) => decadalPalace.name.includes(name)) ? 1 : 0)
-      + (Math.abs(quality) >= 2 ? 1 : 0);
-    const careerTurnScore = (careerGodWeights[fortuneGod] || 0) + clashes.length * 2 + changeStars.length * 1.5 + mutagens.length * 2
-      + (decadalPalace?.name.includes("官禄") ? 5 : decadalPalace && ["命宫", "迁移", "财帛"].some((name) => decadalPalace.name.includes(name)) ? 2 : 0)
-      + (Math.abs(quality) >= 2 ? 1 : 0);
-    const relationshipTurnScore = (spouseGods.includes(fortuneGod) ? 4 : 0) + (dayBranchClash ? 5 : 0) + (dayBranchHarmony ? 4 : 0)
-      + harmonies.length + relationshipStars.length * 1.5 + mutagens.length * 2
-      + (decadalPalace?.name.includes("夫妻") ? 5 : decadalPalace && ["命宫", "福德", "迁移"].some((name) => decadalPalace.name.includes(name)) ? 2 : 0);
+    const helpful = [stemElement, branchElement].some((element) => analysis.favorable.includes(element));
+    const cautious = [stemElement, branchElement].some((element) => analysis.avoid.includes(element));
+    const mode = helpful && !cautious && !mutagens.some((item) => item.endsWith("化忌")) ? "进取" : cautious && !helpful ? "蓄势" : "稳进";
     const turnReasons = [
       clashes.length ? `大运${pillar[1]}冲出生八字的${clashes.join("、")}，环境或角色更容易出现实质调整` : "",
       harmonies.length ? `大运${pillar[1]}与出生八字的${harmonies.join("、")}六合，合作与关系更容易成为推动因素` : "",
@@ -522,32 +499,53 @@ function buildLuck(pillars: string[], gender: Gender, solar: ReturnType<typeof t
       relationshipStars.length ? `${relationshipStars.join("、")}使情绪表达、关系吸引或协商议题增多` : "",
       mutagens.length ? `关系判断同时参看${mutagens.join("、")}` : "",
     ].filter(Boolean);
-    const annualCandidates = Array.from({ length: 10 }, (_, yearIndex) => {
-      const year = startYear + index * 10 + yearIndex;
-      const annualPillar = yearPillar(year);
+    const annualCandidates = Array.from({ length: Math.max(1, endYear - startYear + 1) }, (_, yearIndex) => {
+      const year = startYear + yearIndex;
+      const annualPillar = calculateBazi(`${year}-07-01`, "12:00", gender).pillars[0];
       const annualStem = annualPillar[0];
       const annualBranch = annualPillar[1];
       const annualGod = tenGod(analysis.dayStem, annualStem);
       const annualElement = elementOf[annualStem] || "土";
+      const annualBranchElement = elementOf[annualBranch] || "土";
       const annualClashes = [...new Set(analysis.natalBranches.filter((branch) => branchClashes[annualBranch] === branch))];
       const annualHarmonies = [...new Set(analysis.natalBranches.filter((branch) => branchHarmonies[annualBranch] === branch))];
       const annualDayClash = Boolean(dayBranch && branchClashes[annualBranch] === dayBranch);
       const annualDayHarmony = Boolean(dayBranch && branchHarmonies[annualBranch] === dayBranch);
-      const scores: Record<TurningKind, number> = {
-        overall: annualClashes.length * 4 + annualHarmonies.length * 2 + (analysis.favorable.includes(annualElement) ? 1 : 0) + (analysis.avoid.includes(annualElement) ? 1.2 : 0) + (annualBranch === pillar[1] ? 1 : 0),
-        career: (careerGodWeights[annualGod] || 0) + annualClashes.length * 1.5 + (analysis.favorable.includes(annualElement) ? 1 : 0) + (annualBranch === pillar[1] ? 1 : 0),
-        relationship: (spouseGods.includes(annualGod) ? 4 : 0) + (annualDayClash ? 5 : 0) + (annualDayHarmony ? 4 : 0) + annualHarmonies.length,
+      const annualStrongBalanceTrigger = [annualElement, annualBranchElement].every((element) => analysis.favorable.includes(element))
+        || [annualElement, annualBranchElement].every((element) => analysis.avoid.includes(element));
+      const annualCareerTheme = ["正官", "七杀", "食神", "伤官"].includes(annualGod);
+      const signals: Record<TurningKind, string[]> = {
+        overall: [
+          annualClashes.length ? "流年冲动原局" : "",
+          annualHarmonies.length ? "流年合入原局" : "",
+          annualBranch === pillar[1] ? "岁运同支" : "",
+          annualStrongBalanceTrigger ? "流年干支同时触及喜忌" : "",
+        ].filter(Boolean),
+        career: [
+          annualCareerTheme ? "流年官杀或食伤被引动" : "",
+          annualClashes.length ? "流年冲动原局" : "",
+          decadalPalace && ["官禄", "命宫", "迁移", "财帛"].some((name) => decadalPalace.name.includes(name)) ? "紫微大限落在事业相关宫位" : "",
+          annualBranch === pillar[1] ? "岁运同支" : "",
+        ].filter(Boolean),
+        relationship: [
+          spouseGods.includes(annualGod) ? "配偶星被流年引动" : "",
+          annualDayClash || annualDayHarmony ? "日支被流年引动" : "",
+          decadalPalace && ["夫妻", "命宫", "福德", "迁移"].some((name) => decadalPalace.name.includes(name)) ? "紫微大限触及关系主题" : "",
+          annualBranch === pillar[1] ? "岁运同支" : "",
+        ].filter(Boolean),
       };
       const reasons: Record<TurningKind, string> = {
         overall: annualClashes.length ? `${annualPillar}冲出生八字的${annualClashes.join("、")}，需要核实环境或角色是否变化` : annualHarmonies.length ? `${annualPillar}与出生八字的${annualHarmonies.join("、")}相合，合作与关系议题增加` : `${annualPillar}这一年的干支与${pillar}大运叠加，宜复核当年现实变化`,
         career: `${annualPillar}为${annualGod}${annualClashes.length ? `，地支又冲出生八字的${annualClashes.join("、")}` : ""}，重点核实岗位、职责或收入结构是否调整`,
         relationship: annualDayClash ? `${annualPillar}冲日支${dayBranch}，重点核实相处节奏与生活安排` : annualDayHarmony ? `${annualPillar}合日支${dayBranch}，关系确认与共同安排议题增加` : spouseGods.includes(annualGod) ? `${annualPillar}见${annualGod}，伴侣与承诺议题需要具体核实` : `${annualPillar}这一年，重点观察沟通、边界与共同计划的实际变化`,
       };
-      return { year, pillar: annualPillar, scores, reasons };
+      return { year, pillar: annualPillar, signals, reasons };
     });
     const pickAnnualSignal = (kind: TurningKind) => {
-      const selected = [...annualCandidates].sort((a, b) => b.scores[kind] - a.scores[kind] || a.year - b.year)[0];
-      return { year: selected.year, pillar: selected.pillar, reason: selected.reasons[kind], score: selected.scores[kind] };
+      const selected = annualCandidates.find((item) => item.signals[kind].length >= 2)
+        || annualCandidates.find((item) => item.signals[kind].length === 1)
+        || annualCandidates[0];
+      return { year: selected.year, pillar: selected.pillar, reason: selected.reasons[kind], signals: selected.signals[kind], ready: selected.signals[kind].length >= 2 };
     };
     const annualSignals = {
       overall: pickAnnualSignal("overall"),
@@ -556,18 +554,14 @@ function buildLuck(pillars: string[], gender: Gender, solar: ReturnType<typeof t
     };
     return {
       pillar,
-      age,
-      ageText: index === 0 ? `${formatStartAge(startAgeYears)}起` : `${Math.floor(age)}岁`,
-      years: `${startYear + index * 10}–${startYear + index * 10 + 9}`,
+      age: source.startAge,
+      ageText: index === 0 ? `${formatEngineStart(engine.start)}起` : `${source.startAge}岁`,
+      years: `${startYear}–${endYear}`,
       mode,
       element: stemElement,
       branchElement,
-      quality,
-      turnScore,
       turnReasons,
-      careerTurnScore,
       careerReasons,
-      relationshipTurnScore,
       relationshipReasons,
       annualSignals,
       fortuneGod,
@@ -578,45 +572,26 @@ function buildLuck(pillars: string[], gender: Gender, solar: ReturnType<typeof t
       decadalStars: palaceStars(decadalPalace),
     };
   });
-  const topIndexes = (scoreOf: (fortune: (typeof draftFortunes)[number]) => number) => [...draftFortunes]
-    .map((fortune, index) => ({ index, score: scoreOf(fortune) }))
-    .sort((a, b) => b.score - a.score || a.index - b.index)
-    .slice(0, 2)
-    .map((item) => item.index);
-  const turningIndexes = topIndexes((fortune) => fortune.turnScore);
-  const careerTurningIndexes = topIndexes((fortune) => fortune.careerTurnScore);
-  const relationshipTurningIndexes = topIndexes((fortune) => fortune.relationshipTurnScore);
   const fortunes = draftFortunes.map((fortune, index) => ({
     ...fortune,
-    isTurningPoint: turningIndexes.includes(index),
-    isCareerTurningPoint: careerTurningIndexes.includes(index),
-    isRelationshipTurningPoint: relationshipTurningIndexes.includes(index),
+    isTurningPoint: fortune.annualSignals.overall.ready && fortune.turnReasons.length >= 2,
+    isCareerTurningPoint: fortune.annualSignals.career.ready && fortune.careerReasons.length >= 2,
+    isRelationshipTurningPoint: fortune.annualSignals.relationship.ready && fortune.relationshipReasons.length >= 2,
   }));
   const currentYear = new Date().getFullYear();
-  const currentFortune = fortunes.find((_, index) => currentYear >= startYear + index * 10 && currentYear <= startYear + index * 10 + 9) || fortunes[0];
+  const currentFortune = fortunes.find((fortune) => currentYear >= Number(fortune.years.slice(0, 4)) && currentYear <= Number(fortune.years.slice(-4))) || fortunes[0];
   return {
     fortunes,
-    forward,
-    directionLabel: forward ? "顺排" : "逆排",
-    selectedJie,
-    distanceDays,
-    startAgeYears,
-    startAgeText: formatStartAge(startAgeYears),
-    startDateText: formatWallDate(startTime, true),
-    jieDateText: formatWallDate(selectedJie.time, true),
+    directionLabel: engine.direction,
+    startAgeText: formatEngineStart(engine.start),
+    startDateText: engine.start.solar.replace(/(\d{4})-(\d{2})-(\d{2}) /, "$1年$2月$3日 "),
     currentFortune,
   };
 }
 
-function normalizeSolarDate(date: string) {
-  const [year, month, day] = date.split("-").map(Number);
-  return year && month && day ? `${year}-${pad(month)}-${pad(day)}` : "";
-}
-
-function solarDateFromLunar(year: number, month: number, day: number, time: string, gender: Gender, isLeapMonth: boolean) {
+function solarDateFromLunar(year: number, month: number, day: number, isLeapMonth: boolean) {
   try {
-    const chart = window.iztro?.astro.byLunar(`${year}-${month}-${day}`, getTimeIndex(time), gender, isLeapMonth, true, "zh-CN");
-    return chart?.solarDate ? normalizeSolarDate(chart.solarDate) : "";
+    return solarFromLunarDate(year, month, day, isLeapMonth);
   } catch {
     return "";
   }
@@ -816,8 +791,8 @@ function buildZiweiPalaceDetail(chart: Astrolabe, analysis: ReturnType<typeof bu
   const starText = starNames.length ? compactPalaceSignal(palace) : "本宫无十四主星，先借对宫的星曜来定调。";
   const watch = starNames.slice(0, 2).map((name) => starWatchouts[name]).filter(Boolean).join("；");
   const direct = starNames.length
-    ? `直断：${palace?.name}${starNames.length > 1 ? `以${starNames.slice(0, 2).join("、")}同宫` : `见${starNames[0]}`}，${baseRole}。${starText}`
-    : `直断：${palace?.name}为空宫，这个领域不能只凭“空”下结论，要看对宫怎么把力量借过来。`;
+    ? `当前解读（B/STRUCTURAL）：${palace?.name}${starNames.length > 1 ? `以${starNames.slice(0, 2).join("、")}同宫` : `见${starNames[0]}`}，${baseRole}。${starText}`
+    : `当前解读（B/STRUCTURAL）：${palace?.name}为空宫，这个领域不能只凭“空”下结论，要看对宫怎么把力量借过来。`;
   const action = palace && palaceElementActions[analysis.favorable[0]][palace.name]
     ? `建议：先按喜${analysis.favorable[0]}做——${palaceElementActions[analysis.favorable[0]][palace.name]}；再用喜${analysis.favorable[1]}补足${palaceElementActions[analysis.favorable[1]][palace.name] || "规则与执行"}。`
     : `建议：把${palace?.name || "这个领域"}拆成具体目标、边界与复盘节点，避免只凭一时感觉判断。`;
@@ -863,25 +838,26 @@ function buildLifeReadings(analysis: ReturnType<typeof buildAnalysis>, chart: As
   const careerPalace = palaceByName(chart, "官禄");
   const wealthPalace = palaceByName(chart, "财帛");
   const spousePalace = palaceByName(chart, "夫妻");
+  const isWeaker = analysis.strength.includes("弱");
   const careerHeadline = careerGods >= outputGods && careerGods >= 1.5 ? "权责与规则是职业主轴" : outputGods >= 1.5 ? "靠专业输出打开局面" : resourceGods >= 1.5 ? "先深耕方法，再放大影响" : "用稳定赛道承接能力";
-  const wealthHeadline = wealthGods >= 2 && analysis.strength !== "身弱" ? "财星有一定分量，仍看承接" : wealthGods >= 1 ? "财星有所显现，先看现金流" : "财星不显，收入更看能力与环境";
+  const wealthHeadline = wealthGods >= 2 && !isWeaker ? "财星有一定分量，仍看承接" : wealthGods >= 1 ? "财星有所显现，先看现金流" : "财星不显，收入更看能力与环境";
   const relationHeadline = spouseGods >= 2 ? "伴侣星较多，边界需要说明" : spouseGods >= 1 ? "先观察磨合，再判断关系" : "伴侣星不显，先看共同节奏";
   return [
     {
       icon: "业", label: "事业", headline: careerHeadline,
-      verdict: careerGods >= 1.5 || outputGods >= 1.5 ? "结论：事业能做出成绩，但靠能力、责任和持续交付，不宜只等机会自己出现。" : "结论：事业前期更靠稳定积累，别频繁换方向；把一项能沉淀的能力做深，比追热点更有用。",
+      verdict: careerGods >= 1.5 || outputGods >= 1.5 ? "当前判断（C/CORE）：职业发展更看能力、责任和持续交付，不宜只等机会自己出现。" : "当前判断（C/CORE）：职业前期更适合稳定积累，先把一项可沉淀的能力做深，再评估是否换方向。",
       text: `八字中官杀${describeGodPresence(careerGods)}、食伤${describeGodPresence(outputGods)}、印星${describeGodPresence(resourceGods)}，日主为${analysis.strength}；紫微官禄宫落${careerPalace?.heavenlyStem || "—"}${careerPalace?.earthlyBranch || "—"}，见${palaceStars(careerPalace)}。职业判断宜${careerGods >= outputGods ? "把责任边界、标准和决策权说清楚" : "用作品、表达和解决问题的能力验证位置"}，并用喜${analysis.favorable.join("、")}的方式持续积累。`,
       keywords: `${careerPalace?.majorStars?.slice(0, 2).map((star) => star.name).join(" / ") || "借对宫"} / ${analysis.favorable.join(" / ")}`,
     },
     {
       icon: "财", label: "财富", headline: wealthHeadline,
-      verdict: wealthGods >= 1.5 && analysis.strength !== "身弱" ? "结论：财运有基础，但钱要靠管理留下来；能赚不等于能存，投资不宜一把梭。" : "结论：财运重在正现金流和可复制能力，快钱、重仓与人情借贷要更谨慎。",
-      text: `八字中财星${describeGodPresence(wealthGods)}，${analysis.strength === "身弱" ? "承载力比收入机会的数量更重要，扩张前要先补现金流与执行能力" : "日主并非身弱，但仍要区分稳定收入和高波动来源"}；紫微财帛宫见${palaceStars(wealthPalace)}。具体策略是先用${labels[analysis.favorable[0]]}建立可重复收入，再按可承受损失配置风险。`,
+      verdict: wealthGods >= 1.5 && !isWeaker ? "当前判断（C/CORE）：收入机会可能有，但是否能留下来仍取决于现金流、合同和风险管理；不宜重仓押注。" : "当前判断（C/CORE）：财富策略应先放在稳定现金流和可复制能力，快钱、重仓与人情借贷要更谨慎。",
+      text: `八字中财星${describeGodPresence(wealthGods)}，${isWeaker ? "承载力比收入机会的数量更值得优先核实，扩张前先补现金流与执行能力" : "仍要区分稳定收入和高波动来源"}；紫微财帛宫见${palaceStars(wealthPalace)}。具体策略是先用${labels[analysis.favorable[0]]}建立可重复收入，再按可承受损失配置风险。`,
       keywords: `财星${describeGodPresence(wealthGods)} / ${wealthPalace?.majorStars?.slice(0, 2).map((star) => star.name).join(" / ") || "借对宫"} / 现金流`,
     },
     {
       icon: "情", label: "情感", headline: relationHeadline,
-      verdict: spouseGods >= 1.5 ? "结论：感情不是没机会，难点在边界和承诺是否说清；越含糊，越容易反复。" : "结论：感情宜慢不宜赶，先看相处节奏与价值观；不适合用关系进度证明自己。",
+      verdict: spouseGods >= 1.5 ? "当前判断（C/CORE）：关系机会与关系质量不是一回事，重点在边界和承诺是否说清；越含糊，越容易反复。" : "当前判断（C/CORE）：感情宜慢不宜赶，先看相处节奏与价值观；不适合用关系进度证明自己。",
       text: `${gender}命以${gender === "男" ? "财星" : "官杀"}观察伴侣线索，本盘此类信号${describeGodPresence(spouseGods)}；日支为${analysis.natalBranches[2] || "—"}，是亲密关系中的落脚点。紫微夫妻宫见${palaceStars(spousePalace)}。${spouseGods >= 1.5 ? "相关十神信号较多时，更要提前说清承诺、金钱与个人空间" : "不宜用进度衡量关系，先验证价值观和日常节奏是否相容"}。`,
       keywords: `${gender === "男" ? "财星" : "官杀"} / 日支${analysis.natalBranches[2] || "—"} / ${spousePalace?.majorStars?.slice(0, 2).map((star) => star.name).join(" / ") || "借对宫"}`,
     },
@@ -891,12 +867,12 @@ function buildLifeReadings(analysis: ReturnType<typeof buildAnalysis>, chart: As
 function buildPersonalitySummary(analysis: ReturnType<typeof buildAnalysis>, chart: Astrolabe) {
   const lifePalace = palaceByName(chart, "命");
   const stars = lifePalace?.majorStars.filter((star) => star.name).slice(0, 2).map((star) => star.name) || [];
-  const baziTone = analysis.strength === "身弱" ? "感受与压力反应更敏锐，做事需要先有稳定支点" : analysis.strength === "身强" ? "主见与推动力不弱，容易主动承担，也要防止过度用力" : "既能承担事情，也容易在选择上反复权衡";
+  const baziTone = analysis.strength.includes("弱") ? "感受与压力反应更敏锐，做事需要先有稳定支点" : analysis.strength.includes("旺") ? "主见与推动力不弱，容易主动承担，也要防止过度用力" : "既能承担事情，也容易在选择上反复权衡";
   const starTone = stars.length ? `${stars.join("、")}让你在外在表现上更重${stars.map((name) => starMeanings[name]).filter(Boolean).join("；")}` : "命宫主星信息不完整，性格以八字结构为主判断";
   return {
-    headline: analysis.strength === "身弱" ? "敏感但不软弱，关键在先稳住自己" : analysis.strength === "身强" ? "能扛事，但要学会收力" : "有判断力，但别让犹豫拖慢行动",
+    headline: analysis.strength.includes("弱") ? "敏感但不软弱，关键在先稳住自己" : analysis.strength.includes("旺") ? "能扛事，但要学会收力" : "有判断力，但别让犹豫拖慢行动",
     summary: `八字看，你${baziTone}；紫微命宫${lifePalace ? `落${lifePalace.heavenlyStem}${lifePalace.earthlyBranch}` : "资料不足"}，${starTone}。两盘合看，性格不是单纯“好或坏”，而是你习惯用什么方式面对压力、关系和选择。`,
-    verdict: `直断：你最需要修的不是“更拼”，而是把喜${analysis.favorable[0]}、${analysis.favorable[1]}的做法变成日常规则。${analysis.avoid.join("、")}太过时，容易让判断变急、节奏变乱。`,
+    verdict: `当前判断（C/CORE，${analysis.uncertainty}不确定度）：更值得优先练的不是“更拼”，而是把喜${analysis.favorable[0]}、${analysis.favorable[1]}的做法变成日常规则。${analysis.avoid.join("、")}太过时，判断更容易变急、节奏更容易失衡。`,
     advice: `建议：${elementGuidance[analysis.favorable[0]].steps[0]}；再${elementGuidance[analysis.favorable[1]].steps[1]}。先把基础盘稳，再谈扩大目标。`,
   };
 }
@@ -906,13 +882,13 @@ function buildPatternInsight(analysis: ReturnType<typeof buildAnalysis>) {
   const relation = analysis.interactions.length ? `地支见${analysis.interactions.join("、")}` : "地支未见明显六合或六冲成对出现";
   const primary = elementGuidance[analysis.favorable[0]];
   const secondary = elementGuidance[analysis.favorable[1]];
-  return `本盘五行以${analysis.dominantElement}最重、${analysis.weakestElement}相对较少；天干十神为${visible}，${relation}。当下先用喜${analysis.favorable[0]}的方式“${primary.title}”，再以喜${analysis.favorable[1]}的方式“${secondary.title}”辅助；下面已给出可直接执行的做法。`;
+  return `旺衰先看月令、根气与天干帮扶，不用固定百分比换算。当前结构证据是：${analysis.evidence.slice(0, 3).join("；")}。天干十神为${visible}，${relation}。当下先用喜${analysis.favorable[0]}的方式“${primary.title}”，再以喜${analysis.favorable[1]}的方式“${secondary.title}”辅助；下面给出的是可执行的现实建议，不把单一符号当成必然事件。`;
 }
 
 function answerQuestion(question: string, analysis: ReturnType<typeof buildAnalysis>, chart: Astrolabe, luck: ReturnType<typeof buildLuck>, gender: Gender) {
   const readings = buildLifeReadings(analysis, chart, gender);
   const current = luck.currentFortune;
-  const opening = `先说结论：此盘日主是${analysis.dayStem}${analysis.dayElement}，整体判断为${analysis.strength}，较有助于平衡的五行是${analysis.favorable.join("、")}；当前对应${current.pillar}大运（${current.mode}），紫微这十年的重点在${current.decadalPalace}，见${current.decadalStars}。`;
+  const opening = `先说当前判断（C/CORE，${analysis.uncertainty}不确定度）：此盘日主是${analysis.dayStem}${analysis.dayElement}，整体判断为${analysis.strength}，较有助于平衡的五行是${analysis.favorable.join("、")}；当前对应${current.pillar}大运（${current.mode}），紫微这十年的重点在${current.decadalPalace}，见${current.decadalStars}。`;
   if (/事业|工作|职业|跳槽|创业/.test(question)) return `${opening} ${readings[0].headline}。${readings[0].text}${current.turnReasons[0] ? ` 这一运的变化依据是：${current.turnReasons.join("；")}。` : ""}`;
   if (/财|钱|投资|收入|买房/.test(question)) return `${opening} ${readings[1].headline}。${readings[1].text}任何借贷、投资和房产决定仍应以真实现金流、合同与专业意见为准。`;
   if (/感情|婚姻|对象|恋爱/.test(question)) return `${opening} ${readings[2].headline}。${readings[2].text}这里判断的是互动倾向，不以单星或单一十神断定婚期与吉凶。`;
@@ -933,6 +909,8 @@ function relationKey(item: RelationItem, prefix: string) {
 }
 
 function shortRelationLabel(item: RelationItem) {
+  if (item.relation.includes("三合")) return "三合";
+  if (item.relation.includes("三会")) return "三会";
   if (item.relation.includes("相冲")) return "冲";
   if (item.relation.includes("相害")) return "害";
   if (item.relation.includes("相刑")) return "刑";
@@ -1035,8 +1013,20 @@ export default function Home() {
     time: "12:30", province: "北京市", city: "北京市",
   });
   const [submitted, setSubmitted] = useState(form);
-  const [chart, setChart] = useState<Astrolabe>(() => ({ solarDate: form.date, lunarDate: "庚午年腊月初五", chineseDate: "庚午 戊子 丙寅 甲午", fiveElementsClass: "金四局", soul: "贪狼", body: "天相", palaces: fallbackPalaces }));
   const [solar, setSolar] = useState(() => trueSolarTime(form.date, form.time, provinces[0].cities[0].longitude));
+  const [engine, setEngine] = useState<EngineBazi>(() => {
+    const initialSolar = trueSolarTime(form.date, form.time, provinces[0].cities[0].longitude);
+    return calculateBazi(initialSolar.date, initialSolar.time, form.gender);
+  });
+  const [chart, setChart] = useState<Astrolabe>(() => ({
+    solarDate: form.date,
+    lunarDate: engine.lunarText,
+    chineseDate: engine.pillars.join(" "),
+    fiveElementsClass: "金四局",
+    soul: "贪狼",
+    body: "天相",
+    palaces: fallbackPalaces,
+  }));
   const [isCalculating, setIsCalculating] = useState(false);
   const [formError, setFormError] = useState("");
   const [chartTab, setChartTab] = useState<"bazi" | "ziwei">("bazi");
@@ -1050,12 +1040,12 @@ export default function Home() {
     { role: "assistant", text: "命盘已就绪。你可以直接问事业、财富、情感或某个阶段的选择，我会结合四柱与紫微盘直说重点。" },
   ]);
   const resultRef = useRef<HTMLElement>(null);
-  const pillars = useMemo(() => chart.chineseDate.split(/\s+/).slice(0, 4), [chart]);
-  const analysis = useMemo(() => buildAnalysis(pillars), [pillars]);
+  const pillars = engine.pillars;
+  const analysis = useMemo(() => buildAnalysis(pillars, engine), [pillars, engine]);
   const baziRelations = useMemo(() => buildBaziRelations(pillars), [pillars]);
   const selectedBaziRelation = baziRelations.visualRelations.find((item) => relationKey(item, "bazi") === selectedBaziRelationKey) || null;
   const selectedProvince = useMemo(() => provinces.find((item) => item.name === form.province) || provinces[0], [form.province]);
-  const luck = useMemo(() => buildLuck(pillars, submitted.gender, solar, analysis, chart), [pillars, submitted.gender, solar, analysis, chart]);
+  const luck = useMemo(() => buildLuck(pillars, submitted.gender, analysis, chart, engine), [pillars, submitted.gender, analysis, chart, engine]);
   const fortunes = luck.fortunes;
   const selectedFortune = selectedFortuneIndex === null ? null : fortunes[selectedFortuneIndex];
   const selectedCompatibility = useMemo(
@@ -1079,12 +1069,28 @@ export default function Home() {
   const progressFortunes = fortunes.filter((fortune) => fortune.mode === "进取");
   const cautiousFortunes = fortunes.filter((fortune) => fortune.mode === "蓄势");
 
+  useEffect(() => {
+    let attempts = 0;
+    const syncZiwei = () => {
+      if (!window.iztro) return false;
+      const nextChart = getAstrolabe(solar.date, solar.time, submitted.gender);
+      setChart({ ...nextChart, lunarDate: engine.lunarText, chineseDate: engine.pillars.join(" ") });
+      return true;
+    };
+    if (syncZiwei()) return;
+    const timer = window.setInterval(() => {
+      attempts += 1;
+      if (syncZiwei() || attempts >= 20) window.clearInterval(timer);
+    }, 120);
+    return () => window.clearInterval(timer);
+  }, [engine, solar.date, solar.time, submitted.gender]);
+
   function submitBirth(event: FormEvent) {
     event.preventDefault();
     setFormError("");
     const baseDate = form.calendar === "solar"
       ? form.date
-      : solarDateFromLunar(form.lunarYear, form.lunarMonth, form.lunarDay, form.time, form.gender, form.isLeapMonth);
+      : solarDateFromLunar(form.lunarYear, form.lunarMonth, form.lunarDay, form.isLeapMonth);
     if (!baseDate) {
       setFormError("这个农历日期无法排盘，请确认当月日期以及是否为闰月。");
       return;
@@ -1094,16 +1100,18 @@ export default function Home() {
     const city = province.cities.find((item) => item.name === form.city) || province.cities[0];
     const adjusted = trueSolarTime(baseDate, form.time, city.longitude);
     window.setTimeout(() => {
+      const nextEngine = calculateBazi(adjusted.date, adjusted.time, form.gender);
       const nextChart = getAstrolabe(adjusted.date, adjusted.time, form.gender);
       setSolar(adjusted);
-      setChart(nextChart);
+      setEngine(nextEngine);
+      setChart({ ...nextChart, lunarDate: nextEngine.lunarText, chineseDate: nextEngine.pillars.join(" ") });
       setSubmitted(form);
       setSelectedBaziRelationKey(null);
       setSelectedFortuneIndex(null);
       setSelectedFortuneRelationKey(null);
       setSelectedPalaceName("命宫");
       setSelectedZiweiRelationKey(null);
-      setMessages([{ role: "assistant", text: `${form.name || "命主"}的双盘已重新排好。接下来的回答只使用这次输入的八字、紫微命盘与大运，不沿用上一位的结论。` }]);
+      setMessages([{ role: "assistant", text: `${form.name || "命主"}的双盘已重新排好。四柱与起运已按真太阳时、节气与出生性别重新计算；接下来的判断会标明依据与不确定度，不沿用上一位的结论。` }]);
       setIsCalculating(false);
       window.setTimeout(() => resultRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }), 80);
     }, 650);
@@ -1204,7 +1212,7 @@ export default function Home() {
             </div>
             <div className="chart-summary">
               <div className="day-master"><span>日主</span><b>{analysis.dayStem}</b><p>{analysis.dayElement}命 · {labels[analysis.dayElement]}</p></div>
-              <div className="balance-mini"><span>旺衰</span><strong>{analysis.strength}</strong><div><i style={{ width: `${Math.round(analysis.ratio * 100)}%` }} /></div><small>扶身力量 {Math.round(analysis.ratio * 100)}%</small></div>
+              <div className="balance-mini"><span>旺衰</span><strong>{analysis.strength}</strong><small>月令 · 根气 · 帮扶与泄耗 · {analysis.uncertainty}不确定度</small></div>
               <div className="useful-gods"><span>喜用</span><div>{analysis.favorable.map((item) => <b className={`element-${elementClass[item]}`} key={item}>{item}</b>)}</div><small>宜顺势而用</small></div>
             </div>
             <div className="bazi-key-relations">
@@ -1238,7 +1246,7 @@ export default function Home() {
             </div>
           </>
         )}
-        <p className="chart-footnote">排盘采用真太阳时；子初换日、节气交界与早晚子时等流派差异，正式版将提供规则切换与人工复核。</p>
+        <p className="chart-footnote">四柱采用真太阳时、节气历法与子初换日规则；起运按性别与节气时差精确换算。出生恰在节气或子时交界前后，建议用出生证明时间复核。</p>
       </section>
 
       <section className="reading-section" id="reading">
@@ -1250,14 +1258,16 @@ export default function Home() {
             <div className="personality-conclusion"><b>{personalitySummary.verdict}</b><p>{personalitySummary.advice}</p></div>
           </article>
           <article className="strength-card">
-            <div className="article-title"><span>01</span><div><small>体用平衡</small><h3>{analysis.dayStem}{analysis.dayElement}日主 · {analysis.strength}</h3></div><b>{Math.round(analysis.ratio * 100)}<small>%</small></b></div>
-            <p>这里的“身强、身弱”说的是承担压力与使用资源的能力，不是身体好坏，也不是性格强弱。判断时会一起看出生月份、地支有没有根、天干有没有帮扶，以及全盘是否平衡。此盘扶身力量约占 {Math.round(analysis.ratio * 100)}%，{analysis.strength === "身弱" ? "更适合先把精力、能力和稳定支持补足，再扩大责任与投入。" : "已有一定承受力，更适合通过输出、取舍和规则让全盘回到平衡。"}</p>
-            <div className="element-bars">{analysis.normalized.map((item) => <div key={item.name}><span className={`element-${elementClass[item.name]}`}>{item.name}</span><div><i style={{ width: `${Math.max(item.value, 6)}%` }} /></div><b>{item.raw}</b></div>)}</div>
+            <div className="article-title"><span>01</span><div><small>体用平衡</small><h3>{analysis.dayStem}{analysis.dayElement}日主 · {analysis.strength}</h3></div><b className="certainty-mark">{analysis.uncertainty}<small>不确定度</small></b></div>
+            <p>这里的“身强、身弱”说的是在这张命局里承受压力、调动资源的相对状态，不是身体好坏，也不是性格强弱。判断优先看出生月份，再看地支根气、天干帮扶与泄耗是否同向；它不适合被简化成一个固定百分比。当前为{analysis.strength}，{analysis.strength.includes("弱") ? "宜先把精力、能力和稳定支持补足，再扩大责任与投入。" : "宜用输出、取舍和规则，让结构保持可持续。"}</p>
+            <div className="evidence-list" aria-label="旺衰判断依据">
+              {analysis.evidence.map((evidence, index) => <div key={evidence}><b>{index < 4 ? "A/STRUCTURAL" : "C/CORE"}</b><span>{evidence}</span></div>)}
+            </div>
             <div className="god-row"><span>用神 <b className={`element-${elementClass[analysis.favorable[0]]}`}>{analysis.favorable[0]}</b></span><span>喜神 <b className={`element-${elementClass[analysis.favorable[1]]}`}>{analysis.favorable[1]}</b></span><span>慎用 <b>{analysis.avoid.join("、")}</b></span></div>
             <div className="balance-insights">
-              <div><span>旺衰证据</span><strong>{analysis.dominantElement}势最显，{analysis.weakestElement}势相对较少</strong><p>扶身力量约 {Math.round(analysis.ratio * 100)}%，因此定为{analysis.strength}，后续取用先看全局能否回到平衡。</p></div>
-              <div><span>体用路径</span><strong>先用{analysis.favorable[0]}，再借{analysis.favorable[1]}</strong><p>{elementGuidance[analysis.favorable[0]].title}是主线，{elementGuidance[analysis.favorable[1]].title}用来辅助落地。</p></div>
-              <div><span>需要节制</span><strong>{analysis.avoid.join("、")}不宜再过度加码</strong><p>{analysis.interactions.length ? `出生八字又见${analysis.interactions.join("、")}，遇到相似的大运时应多留一次复核。` : "出生八字的合冲信号不重，更适合稳定积累，不必为了变化而变化。"}</p></div>
+              <div><span>判断结论 · C/CORE</span><strong>当前定为{analysis.strength}</strong><p>输入可信度为{analysis.inputConfidence}：出生时间、地点与真太阳时已参与定盘；结论仍需用现实经历核验。</p></div>
+              <div><span>体用路径 · C/CORE</span><strong>先用{analysis.favorable[0]}，再借{analysis.favorable[1]}</strong><p>{elementGuidance[analysis.favorable[0]].title}是主线，{elementGuidance[analysis.favorable[1]].title}用来辅助落地。</p></div>
+              <div><span>需要节制 · B/STRUCTURAL</span><strong>{analysis.avoid.join("、")}不宜再过度加码</strong><p>{analysis.interactions.length ? `出生八字又见${analysis.interactions.join("、")}，遇到相似的大运时应多留一次复核。` : "出生八字的合冲信号不重，更适合稳定积累，不必为了变化而变化。"}</p></div>
             </div>
           </article>
           <article className="pattern-card">
@@ -1283,8 +1293,8 @@ export default function Home() {
         <div className="fortune-heading"><div><span>十年一步</span><h2>大运走势</h2></div><p>大运反映十年左右的阶段重点，不是简单的“好或坏”；点击任一步大运，可以查看它与出生八字怎样配合。</p></div>
         <div className="luck-start-card">
           <div><span>实际起运时刻</span><strong>{luck.startDateText}</strong><small>出生后 {luck.startAgeText} 起运</small></div>
-          <div><span>推算依据</span><strong>{luck.directionLabel} · 取{luck.selectedJie.name}</strong><small>{luck.jieDateText}，相距 {luck.distanceDays.toFixed(2)} 天</small></div>
-          <p>按年干阴阳配合性别定顺逆，以出生时刻至相邻“节”的实际时差，采用“三日折一年、一日折四个月”换算。</p>
+          <div><span>推算依据</span><strong>{luck.directionLabel} · 节气精确换算</strong><small>性别、出生时刻与相邻节气时差共同参与计算</small></div>
+          <p>起运使用与四柱同源的 6tail 节气历法（sect=2）计算到具体时刻，不再用统一年龄或手工估算替代。</p>
         </div>
         <div className="fortune-legend"><span><i className="dot progress" />适合进取</span><span><i className="dot steady" />稳中求进</span><span><i className="dot pause" />蓄势调整</span></div>
         <p className="fortune-hint">点选下方任一组干支，只显示这步大运与出生八字之间真正需要看的关键连线。</p>

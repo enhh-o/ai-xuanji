@@ -30,7 +30,7 @@ test("renders the complete Xuanji destiny experience", async () => {
   assert.match(html, /大运走势/);
   assert.match(html, /实际起运时刻/);
   assert.match(html, /关键转折的依据与建议/);
-  assert.match(html, /旺衰证据/);
+  assert.match(html, /判断结论/);
   assert.match(html, /体用路径/);
   assert.match(html, /需要节制/);
   assert.match(html, /全盘关键转折/);
@@ -41,7 +41,7 @@ test("renders the complete Xuanji destiny experience", async () => {
   assert.match(html, /运内重点年/);
   assert.match(html, /命盘依据/);
   assert.match(html, /现实核验/);
-  assert.match(html, /做月度预算并保留应急金/);
+  assert.match(html, /制定90天学习或项目计划/);
   assert.match(html, /element-metal/);
   assert.match(html, /心中有惑/);
   assert.match(html, /iztro\.min\.js/);
@@ -63,12 +63,12 @@ test("紫微命盘以宫位聚焦与宫间连线呈现三方和对宫职责", as
   assert.match(styles, /\.palace-relation-line/);
 });
 
-test("三类关键转折分别按命盘信号计算", async () => {
+test("三类关键转折按至少两层命盘信号筛选", async () => {
   const source = await readFile(new URL("../app/page.tsx", import.meta.url), "utf8");
   const styles = await readFile(new URL("../app/globals.css", import.meta.url), "utf8");
-  assert.match(source, /careerTurnScore/);
-  assert.match(source, /relationshipTurnScore/);
-  assert.match(source, /yearPillar/);
+  assert.match(source, /signals\[kind\]\.length >= 2/);
+  assert.match(source, /calculateBazi\(`\$\{year\}-07-01`/);
+  assert.match(source, /annualStrongBalanceTrigger/);
   assert.match(source, /annualSignals/);
   assert.match(source, /isCareerTurningPoint/);
   assert.match(source, /isRelationshipTurningPoint/);
@@ -88,7 +88,8 @@ test("判词避免夸张与恭维式话术", async () => {
   const source = await readFile(new URL("../app/page.tsx", import.meta.url), "utf8");
   assert.doesNotMatch(source, /优势容易被别人看见|机会可见|关系机会不弱|贵人资源成为关键/);
   assert.match(source, /命盘给的是倾向/);
-  assert.match(source, /直断：/);
+  assert.match(source, /当前判断（C\/CORE/);
+  assert.doesNotMatch(source, /扶身力量约占|扶身力量约/);
 });
 
 test("默认使用女性示例并补足大运卡片信息", async () => {
@@ -144,5 +145,19 @@ test("性格与三类主题都提供简明结论和建议", async () => {
   assert.match(source, /label: "财富"/);
   assert.match(source, /label: "情感"/);
   assert.match(source, /\{item\.label\}总判/);
-  assert.match(source, /结论：/);
+  assert.match(source, /当前判断（C\/CORE/);
+});
+
+test("四柱、农历换算与起运使用同源精确历法引擎", async () => {
+  const page = await readFile(new URL("../app/page.tsx", import.meta.url), "utf8");
+  const engine = await readFile(new URL("../app/bazi-engine.ts", import.meta.url), "utf8");
+  assert.match(engine, /lunar-javascript/);
+  assert.match(engine, /eightChar\.setSect\(2\)/);
+  assert.match(engine, /eightChar\.getYun\(gender === "男" \? 1 : 0, 2\)/);
+  assert.match(engine, /Array\.isArray\(stems\) \? stems\.join\(""\) : stems/);
+  assert.match(engine, /solarFromLunarDate/);
+  assert.match(page, /calculateBazi\(adjusted\.date, adjusted\.time, form\.gender\)/);
+  assert.match(page, /起运使用与四柱同源的 6tail 节气历法/);
+  assert.doesNotMatch(page, /function nextPillar/);
+  assert.doesNotMatch(page, /function yearPillar/);
 });
