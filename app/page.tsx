@@ -1008,25 +1008,39 @@ function RelationDetail({ item, title = "这条关系怎么读" }: { item: Relat
 
 function BaziRelationMap({ pillars, relations, selectedKey, onSelect }: { pillars: string[]; relations: RelationItem[]; selectedKey: string | null; onSelect: (key: string) => void }) {
   if (!relations.length) return <p className="relation-empty">本盘没有需要特别标出的合、冲、刑、害、破或半合半会；重点放在五行强弱与日常取舍即可。</p>;
+  const stemRelations = relations.filter((item) => item.layer === "stem");
+  const branchRelations = relations.filter((item) => item.layer === "branch");
+  const rowGap = 27;
+  const stemRowStart = 14;
+  const stemNodeTop = stemRowStart + Math.max(1, stemRelations.length) * rowGap + 16;
+  const branchNodeTop = stemNodeTop + 71;
+  const branchRowStart = branchNodeTop + 52;
+  const canvasHeight = branchRowStart + Math.max(1, branchRelations.length) * rowGap + 13;
+  const renderRelations = (items: RelationItem[], top: number) => items.map((item, index) => {
+    const key = relationKey(item, "bazi");
+    const from = ((item.leftIndex || 0) + .5) * 25;
+    const to = ((item.rightIndex || 1) + .5) * 25;
+    return <button type="button" className={`relation-map-link relation-map-row ${item.tone} ${selectedKey === key ? "selected" : ""}`} key={key} style={{ left: `${from}%`, width: `${to - from}%`, top: `${top + index * rowGap}px` }} aria-label={`${item.leftLabel}${item.left}与${item.rightLabel}${item.right}：${item.relation}`} aria-pressed={selectedKey === key} onClick={() => onSelect(key)}>
+      <i className={`relation-end relation-end-left element-${elementClass[elementOf[item.left] || "土"]}`}>{item.left}</i>
+      <span>{shortRelationLabel(item)}</span>
+      <i className={`relation-end relation-end-right element-${elementClass[elementOf[item.right] || "土"]}`}>{item.right}</i>
+    </button>;
+  });
   return <div className="bazi-relation-map" aria-label="八字关键关系连线图">
-    <div className="relation-map-canvas relation-map-pillars" style={{ height: `${Math.max(186, 142 + relations.length * 30)}px` }}>
-      <div className="relation-map-nodes">
+    <div className="relation-map-canvas relation-map-pillars" style={{ height: `${canvasHeight}px` }}>
+      {renderRelations(stemRelations, stemRowStart)}
+      <div className="relation-map-nodes relation-map-stem-nodes" style={{ top: `${stemNodeTop}px` }}>
         {pillars.map((pillar, index) => <div className="relation-map-node" key={`bazi-node-${index}`}>
           <small>{pillarLabels[index]}</small>
           <span className={`element-${elementClass[elementOf[pillar[0]] || "土"]}`}>{pillar[0]}</span>
+        </div>)}
+      </div>
+      <div className="relation-map-nodes relation-map-branch-nodes" style={{ top: `${branchNodeTop}px` }}>
+        {pillars.map((pillar, index) => <div className="relation-map-node" key={`bazi-branch-${index}`}>
           <b className={`element-${elementClass[elementOf[pillar[1]] || "土"]}`}>{pillar[1]}</b>
         </div>)}
       </div>
-      {relations.map((item, index) => {
-        const key = relationKey(item, "bazi");
-        const from = ((item.leftIndex || 0) + .5) * 25;
-        const to = ((item.rightIndex || 1) + .5) * 25;
-        return <button type="button" className={`relation-map-link relation-map-row ${item.tone} ${selectedKey === key ? "selected" : ""}`} key={key} style={{ left: `${from}%`, width: `${to - from}%`, top: `${122 + index * 30}px` }} aria-label={`${item.leftLabel}${item.left}与${item.rightLabel}${item.right}：${item.relation}`} aria-pressed={selectedKey === key} onClick={() => onSelect(key)}>
-          <i className={`relation-end relation-end-left element-${elementClass[elementOf[item.left] || "土"]}`}>{item.left}</i>
-          <span>{shortRelationLabel(item)}</span>
-          <i className={`relation-end relation-end-right element-${elementClass[elementOf[item.right] || "土"]}`}>{item.right}</i>
-        </button>;
-      })}
+      {renderRelations(branchRelations, branchRowStart)}
     </div>
   </div>;
 }

@@ -123,6 +123,10 @@ test("四柱八字只呈现关键关系的紧凑连线并可点开通俗解释",
   assert.doesNotMatch(source, /只标出真正需要看的线|连线放在字的上、下方|只画出这步大运/);
   assert.match(source, /relation-map-pillars/);
   assert.match(source, /relation-map-nodes/);
+  assert.match(source, /stemRelations/);
+  assert.match(source, /branchRelations/);
+  assert.match(source, /relation-map-stem-nodes/);
+  assert.match(source, /relation-map-branch-nodes/);
   assert.match(source, /relation-end-left/);
   assert.match(source, /relation-end-right/);
   assert.match(source, /RelationDetail/);
