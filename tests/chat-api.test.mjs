@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
 import test from "node:test";
 
 async function loadWorker() {
@@ -106,4 +107,9 @@ test("chat API converts an upstream failure into a safe Chinese error", async ()
   } finally {
     globalThis.fetch = originalFetch;
   }
+});
+
+test("模型问询为复杂命盘解读保留一分钟等待时间", async () => {
+  const source = await readFile(new URL("../worker/chat.ts", import.meta.url), "utf8");
+  assert.match(source, /const MODEL_TIMEOUT_MS = 60_000/);
 });

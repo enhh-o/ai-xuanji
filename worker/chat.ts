@@ -20,7 +20,7 @@ interface ChartContext {
 
 const MAX_QUESTION_LENGTH = 800;
 const MAX_CONTEXT_FIELD_LENGTH = 700;
-const MODEL_TIMEOUT_MS = 20_000;
+const MODEL_TIMEOUT_MS = 60_000;
 
 function json(body: Record<string, string>, status = 200) {
   return new Response(JSON.stringify(body), {

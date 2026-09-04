@@ -200,7 +200,7 @@ test("问询框通过同源 AI 接口发送命盘上下文并显示状态", asyn
   const source = await readFile(new URL("../app/page.tsx", import.meta.url), "utf8");
   assert.match(source, /fetch\("\/api\/chat"/);
   assert.match(source, /isChatLoading/);
-  assert.match(source, /正在整理命盘信息/);
+  assert.match(source, /正在结合命盘分析，通常需要半分钟左右/);
   assert.match(source, /buildChatContext/);
   assert.doesNotMatch(source, /规则引擎演示版/);
 });

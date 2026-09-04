@@ -1460,7 +1460,7 @@ export default function Home() {
       <section className="consult-section" id="consult">
         <div className="consult-copy"><span>命盘问询</span><h2>心中有惑，<br />不妨直问</h2><p>回答会结合当前八字与紫微盘，但保留你的现实选择权。</p><div className="suggestions">{["我适合创业吗？", "未来三年财运如何？", "感情里要注意什么？"].map((item) => <button disabled={isChatLoading} onClick={() => sendQuestion(item)} key={item}>{item}<span>→</span></button>)}</div></div>
         <div className="chat-card">
-          <div className="chat-head"><div><span className="avatar">玄</span><div><strong>玄机解盘</strong><small><i /> {isChatLoading ? "正在整理命盘信息…" : "模型问询"}</small></div></div><span>两盘一起看</span></div>
+          <div className="chat-head"><div><span className="avatar">玄</span><div><strong>玄机解盘</strong><small><i /> {isChatLoading ? "正在结合命盘分析，通常需要半分钟左右" : "模型问询"}</small></div></div><span>两盘一起看</span></div>
           <div className="chat-messages" aria-live="polite">
             {messages.map((message, index) => <div className={`message ${message.role}`} key={`${message.role}-${index}`}><small>{message.role === "assistant" ? "玄机" : submitted.name}</small><p>{message.text}</p></div>)}
           </div>
