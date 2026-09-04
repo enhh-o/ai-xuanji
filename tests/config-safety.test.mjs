@@ -17,3 +17,8 @@ test("pnpm 工作区声明根项目，供 Cloudflare 安装依赖", async () => 
   const workspace = await readFile(new URL("../pnpm-workspace.yaml", import.meta.url), "utf8");
   assert.match(workspace, /^packages:\r?\n\s+- ['"]\.['"]$/m);
 });
+
+test("部署的 Worker 使用公开项目名称", async () => {
+  const packageJson = JSON.parse(await readFile(new URL("../package.json", import.meta.url), "utf8"));
+  assert.equal(packageJson.name, "ai-xuanji");
+});
