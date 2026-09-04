@@ -22,3 +22,11 @@ test("部署的 Worker 使用公开项目名称", async () => {
   const packageJson = JSON.parse(await readFile(new URL("../package.json", import.meta.url), "utf8"));
   assert.equal(packageJson.name, "ai-xuanji");
 });
+
+test("Cloudflare 部署配置保留控制台中手动设置的模型变量", async () => {
+  const wranglerConfig = JSON.parse(
+    await readFile(new URL("../dist/server/wrangler.json", import.meta.url), "utf8"),
+  );
+
+  assert.equal(wranglerConfig.keep_vars, true);
+});

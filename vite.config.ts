@@ -14,6 +14,9 @@ const isCodexSeatbeltSandbox = process.env.CODEX_SANDBOX === "seatbelt";
 const localBindingConfig = {
   main: "./worker/index.ts",
   compatibility_flags: ["nodejs_compat"],
+  // The Cloudflare dashboard owns runtime AI settings. Keep them when a
+  // Git-triggered `wrangler deploy` uploads a new Worker build.
+  keep_vars: true,
   d1_databases: d1
     ? [
         {
