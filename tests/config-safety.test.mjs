@@ -12,3 +12,8 @@ test("公开配置模板不含真实密钥且说明 Cloudflare Secret", async ()
   assert.match(readme, /Cloudflare Secret/);
   assert.doesNotMatch(example, /sk-|ark\.cn-beijing\.volces\.com|deepseek-v4-pro/);
 });
+
+test("pnpm 工作区声明根项目，供 Cloudflare 安装依赖", async () => {
+  const workspace = await readFile(new URL("../pnpm-workspace.yaml", import.meta.url), "utf8");
+  assert.match(workspace, /^packages:\r?\n\s+- ['"]\.['"]$/m);
+});
