@@ -30,3 +30,16 @@ test("Cloudflare 部署配置保留控制台中手动设置的模型变量", asy
 
   assert.equal(wranglerConfig.keep_vars, true);
 });
+
+test("Cloudflare 构建自动附带非敏感的模型连接配置", async () => {
+  const wranglerConfig = JSON.parse(
+    await readFile(new URL("../dist/server/wrangler.json", import.meta.url), "utf8"),
+  );
+
+  assert.equal(
+    wranglerConfig.vars.AI_CHAT_COMPLETIONS_URL,
+    "https://ark.cn-beijing.volces.com/api/v3/chat/completions",
+  );
+  assert.equal(wranglerConfig.vars.AI_MODEL, "deepseek-v4-pro-ga-260813");
+  assert.equal("AI_API_KEY" in wranglerConfig.vars, false);
+});

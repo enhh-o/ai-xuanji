@@ -17,6 +17,13 @@ const localBindingConfig = {
   // The Cloudflare dashboard owns runtime AI settings. Keep them when a
   // Git-triggered `wrangler deploy` uploads a new Worker build.
   keep_vars: true,
+  // These two values are service routing metadata, not credentials. Keeping
+  // them in source makes each Cloudflare build self-contained; AI_API_KEY
+  // remains a dashboard Secret and is never included here.
+  vars: {
+    AI_CHAT_COMPLETIONS_URL: "https://ark.cn-beijing.volces.com/api/v3/chat/completions",
+    AI_MODEL: "deepseek-v4-pro-ga-260813",
+  },
   d1_databases: d1
     ? [
         {
