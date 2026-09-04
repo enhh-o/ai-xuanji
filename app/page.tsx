@@ -3,6 +3,7 @@
 import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { provinces } from "./china-cities";
 import { calculateAnnualPillar, calculateBazi, solarFromLunarDate, type EngineBazi } from "./bazi-engine";
+import { buildChatContext } from "./chat-context";
 
 type Gender = "男" | "女";
 type CalendarKind = "solar" | "lunar";
@@ -950,17 +951,6 @@ function buildPatternInsight(analysis: ReturnType<typeof buildAnalysis>) {
   return `旺衰先看月令、根气与天干帮扶，不用固定百分比换算。当前结构证据是：${analysis.evidence.slice(0, 3).join("；")}。天干十神为${visible}，${relation}。当下先用喜${analysis.favorable[0]}的方式“${primary.title}”，再以喜${analysis.favorable[1]}的方式“${secondary.title}”辅助；下面给出的是可执行的现实建议，不把单一符号当成必然事件。`;
 }
 
-function answerQuestion(question: string, analysis: ReturnType<typeof buildAnalysis>, chart: Astrolabe, luck: ReturnType<typeof buildLuck>, gender: Gender) {
-  const readings = buildLifeReadings(analysis, chart, gender);
-  const current = luck.currentFortune;
-  const opening = `先说综合判断（${analysis.uncertainty}不确定度）：此盘日主是${analysis.dayStem}${analysis.dayElement}，整体判断为${analysis.strength}，较有助于平衡的五行是${analysis.favorable.join("、")}；当前对应${current.pillar}大运（${current.mode}），紫微这十年的重点在${current.decadalPalace}，见${current.decadalStars}。`;
-  if (/事业|工作|职业|跳槽|创业/.test(question)) return `${opening} ${readings[0].headline}。${readings[0].text}${current.turnReasons[0] ? ` 这一运的变化依据是：${current.turnReasons.join("；")}。` : ""}`;
-  if (/财|钱|投资|收入|买房/.test(question)) return `${opening} ${readings[1].headline}。${readings[1].text}任何借贷、投资和房产决定仍应以真实现金流、合同与专业意见为准。`;
-  if (/感情|婚姻|对象|恋爱/.test(question)) return `${opening} ${readings[2].headline}。${readings[2].text}这里判断的是互动倾向，不以单星或单一十神断定婚期与吉凶。`;
-  if (/今年|流年|明年|阶段|转折/.test(question)) return `${opening} 这一阶段是否是转折，不看固定年龄，而要把大运和出生八字的合冲、五行是否平衡，以及紫微十年主题放在一起判断。当前依据是：${current.turnReasons.join("；") || "未见强烈合冲，宜按稳进节奏观察现实信号"}。`;
-  return `${opening} 八字给出的行动抓手是${labels[analysis.favorable[0]]}与${labels[analysis.favorable[1]]}；紫微则提示把当前${current.decadalPalace}的主题作为现实验证场。若你补充具体事件、时间范围与可选方案，我可以继续按同一张双盘细分。`;
-}
-
 function ColoredPillar({ pillar, suffix = "", className = "" }: { pillar: string; suffix?: string; className?: string }) {
   return <span className={`colored-pillar ${className}`.trim()}>
     <span className={`element-${elementClass[elementOf[pillar[0]] || "土"]}`}>{pillar[0]}</span>
@@ -1120,6 +1110,8 @@ export default function Home() {
   const [selectedPalaceName, setSelectedPalaceName] = useState("命宫");
   const [selectedZiweiRelationKey, setSelectedZiweiRelationKey] = useState<string | null>(null);
   const [question, setQuestion] = useState("");
+  const [isChatLoading, setIsChatLoading] = useState(false);
+  const [chatError, setChatError] = useState("");
   const [messages, setMessages] = useState<Array<{ role: "user" | "assistant"; text: string }>>([
     { role: "assistant", text: "命盘已就绪。你可以直接问事业、财富、情感或某个阶段的选择，我会结合四柱与紫微盘直说重点。" },
   ]);
@@ -1201,11 +1193,45 @@ export default function Home() {
     }, 650);
   }
 
-  function sendQuestion(text = question) {
+  async function sendQuestion(text = question) {
     const clean = text.trim();
-    if (!clean) return;
+    if (!clean || isChatLoading) return;
     setQuestion("");
-    setMessages((current) => [...current, { role: "user", text: clean }, { role: "assistant", text: answerQuestion(clean, analysis, chart, luck, submitted.gender) }]);
+    setChatError("");
+    setIsChatLoading(true);
+    setMessages((current) => [...current, { role: "user", text: clean }]);
+
+    const chartContext = buildChatContext({
+      pillars,
+      ziweiSoul: chart.soul,
+      ziweiBody: chart.body,
+      selectedPalace: selectedPalaceDetail.palace.name,
+      favorable: analysis.favorable,
+      avoid: analysis.avoid,
+      strength: analysis.strength,
+      fortuneStages: fortunes.slice(0, 3).map((fortune) => `${fortune.pillar}运（${fortune.years}，${fortune.mode}）`),
+      gender: submitted.gender,
+    });
+    const fallback = "问询暂时无法完成，请稍后重试。";
+    try {
+      const response = await fetch("/api/chat", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ question: clean, chartContext, history: messages.slice(-6) }),
+      });
+      const payload = await response.json().catch(() => null) as { answer?: unknown; error?: unknown } | null;
+      if (!response.ok || typeof payload?.answer !== "string" || !payload.answer.trim()) {
+        throw new Error(typeof payload?.error === "string" ? payload.error : fallback);
+      }
+      setMessages((current) => [...current, { role: "assistant", text: payload.answer.trim() }]);
+    } catch (error) {
+      const message = error instanceof Error && error.message ? error.message : fallback;
+      setChatError(message);
+      setQuestion(clean);
+      setMessages((current) => [...current, { role: "assistant", text: message }]);
+    } finally {
+      setIsChatLoading(false);
+    }
   }
 
   const heroPillars = pillars.length === 4 ? pillars : ["庚午", "戊子", "丙寅", "甲午"];
@@ -1432,14 +1458,14 @@ export default function Home() {
       </section>
 
       <section className="consult-section" id="consult">
-        <div className="consult-copy"><span>命盘问询</span><h2>心中有惑，<br />不妨直问</h2><p>回答会结合当前八字与紫微盘，但保留你的现实选择权。</p><div className="suggestions">{["我适合创业吗？", "未来三年财运如何？", "感情里要注意什么？"].map((item) => <button onClick={() => sendQuestion(item)} key={item}>{item}<span>→</span></button>)}</div></div>
+        <div className="consult-copy"><span>命盘问询</span><h2>心中有惑，<br />不妨直问</h2><p>回答会结合当前八字与紫微盘，但保留你的现实选择权。</p><div className="suggestions">{["我适合创业吗？", "未来三年财运如何？", "感情里要注意什么？"].map((item) => <button disabled={isChatLoading} onClick={() => sendQuestion(item)} key={item}>{item}<span>→</span></button>)}</div></div>
         <div className="chat-card">
-          <div className="chat-head"><div><span className="avatar">玄</span><div><strong>玄机解盘</strong><small><i /> 在线 · 规则引擎演示版</small></div></div><span>两盘一起看</span></div>
+          <div className="chat-head"><div><span className="avatar">玄</span><div><strong>玄机解盘</strong><small><i /> {isChatLoading ? "正在整理命盘信息…" : "模型问询"}</small></div></div><span>两盘一起看</span></div>
           <div className="chat-messages" aria-live="polite">
             {messages.map((message, index) => <div className={`message ${message.role}`} key={`${message.role}-${index}`}><small>{message.role === "assistant" ? "玄机" : submitted.name}</small><p>{message.text}</p></div>)}
           </div>
-          <div className="chat-input"><textarea value={question} onChange={(e) => setQuestion(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendQuestion(); } }} placeholder="说说你当下最困惑的事…" aria-label="输入你的问题" /><button onClick={() => sendQuestion()} aria-label="发送问题">↑</button></div>
-          <p>演示版为本地规则解读，正式版接入大模型后可进行连续深度问答。</p>
+          <div className="chat-input"><textarea disabled={isChatLoading} value={question} onChange={(e) => setQuestion(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendQuestion(); } }} placeholder="说说你当下最困惑的事…" aria-label="输入你的问题" /><button disabled={isChatLoading} aria-busy={isChatLoading} onClick={() => sendQuestion()} aria-label="发送问题">↑</button></div>
+          <p>{chatError || "模型会结合当前命盘回答；命理判断仅供文化与个人反思参考。"}</p>
         </div>
       </section>
 
