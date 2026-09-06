@@ -96,6 +96,14 @@ actions tied to the current ChatGPT user. Leave public content anonymous.
 
 ## AI 问询与 Cloudflare 配置
 
+### 角色与命盘上下文
+
+角色说明位于 `prompts/mingli-agent.md`，后端通过 Vite 的 `?raw` 导入，在构建时打包进 Worker，每次问询自动附带。修改该文件并发布即可更新角色，无需在 Cloudflare 手动上传 Markdown。它参考 yueyuan 的分析纪律，不代表已载入 Skill 全文或古籍知识库，也不提供独立盲测和长期记忆。
+
+聊天上下文包含四柱、藏干、天干十神、校正时间、起运、全部引擎大运、十二宫星曜与出生后 120 年的流年干支。未就绪的紫微示例盘不发送；未覆盖的大运、未提供的紫微流年四化明确标记缺失。年度归运与精确交运日有区别，交运年须进一步核对。网页旺衰喜忌作为“程序初判”供模型复核。本次不会改变页面自动生成的解读规则。
+
+接口地址与模型标识已在 `vite.config.ts` 的 `vars` 中管理，GitHub 自动部署会带上这两项；API Key 仍只放在 Cloudflare Secret。扩充上下文会增加每次模型调用的输入量；本地自动测试使用模拟模型，不产生模型费用。
+
 网页中的“玄机解盘”会通过同源的 `/api/chat` 请求模型服务。密钥只由 Cloudflare Worker 读取，浏览器和 GitHub 仓库都不应保存真实密钥。
 
 ### 本地配置
@@ -109,7 +117,7 @@ actions tied to the current ChatGPT user. Leave public content anonymous.
 在 Cloudflare 的 Worker（或绑定该 Worker 的项目）设置中添加同名变量：
 
 - 将 `AI_API_KEY` 添加为 **Cloudflare Secret**；它只保存在 Cloudflare 侧，不显示在网页中。
-- 将 `AI_CHAT_COMPLETIONS_URL` 和 `AI_MODEL` 添加为普通环境变量。
+- `AI_CHAT_COMPLETIONS_URL` 和 `AI_MODEL` 由 `vite.config.ts` 自动部署；需要更换时修改该文件，控制台临时修改会在后续部署时恢复为代码配置。
 - 变量名必须与 `.env.example` 完全一致。发布后，从网页发送一条问询来检查 `/api/chat` 是否能正常返回回答。
 
 若页面提示“模型服务尚未配置”，先检查三个变量的名称和值；若提示模型暂时不可用或超时，则检查模型服务状态、额度、模型标识和接口地址。不要把密钥粘贴到前端代码、公开 Issue 或 GitHub 提交中。

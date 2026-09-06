@@ -78,7 +78,10 @@ test("chat API forwards a validated request and returns provider text", async ()
     assert.equal(response.status, 200);
     assert.ok(upstreamRequest);
     assert.equal(upstreamRequest.headers.get("authorization"), "Bearer test-key");
-    assert.equal((await upstreamRequest.json()).model, "test-model");
+    const sent = await upstreamRequest.json();
+    assert.equal(sent.model, "test-model");
+    assert.ok(sent.messages[0].content.includes("玄机 · 命理顾问角色与分析约定"));
+    assert.ok(sent.messages[0].content.includes("不虚构执业年限"));
     assert.equal((await response.json()).answer, "先稳住节奏，再看机会。");
   } finally {
     globalThis.fetch = originalFetch;
@@ -107,6 +110,26 @@ test("chat API converts an upstream failure into a safe Chinese error", async ()
   } finally {
     globalThis.fetch = originalFetch;
   }
+});
+
+test("模型收到的扩展命盘保留末尾宫位、大运和流年", async () => {
+  const worker = await loadWorker();
+  const originalFetch = globalThis.fetch;
+  let prompt;
+  globalThis.fetch = async (_input, init) => {
+    prompt = JSON.parse(init.body).messages[0].content;
+    return Response.json({ choices: [{ message: { content: "资料收到" } }] });
+  };
+  try {
+    await worker.fetch(jsonRequest({ question: "晚年如何", chartContext: {
+      ...validContext,
+      ziweiSummary: "宫位资料".repeat(250) + "末宫天府",
+      fortuneSummary: "大运资料".repeat(250) + "末运辛丑",
+      chartDetails: "校正后真太阳时及起运日期",
+      annualSummary: "流年资料".repeat(250) + "末年2100",
+    } }), { ...minimalEnv, AI_API_KEY: "test-key", AI_CHAT_COMPLETIONS_URL: "https://model.example/chat/completions", AI_MODEL: "test-model" }, testContext);
+    for (const value of ["末宫天府", "末运辛丑", "末年2100", "校正后真太阳时及起运日期"]) assert.ok(prompt.includes(value));
+  } finally { globalThis.fetch = originalFetch; }
 });
 
 test("模型问询为复杂命盘解读保留一分钟等待时间", async () => {

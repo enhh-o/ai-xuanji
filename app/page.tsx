@@ -1202,6 +1202,13 @@ export default function Home() {
     setMessages((current) => [...current, { role: "user", text: clean }]);
 
     const chartContext = buildChatContext({
+      ziweiReady: chart.palaces !== fallbackPalaces,
+      palaceSummaries: chart.palaces.map((palace) => `${palace.name}（${palace.heavenlyStem}${palace.earthlyBranch}${palace.isBodyPalace ? "，身宫" : ""}）：主星${palace.majorStars.map((star) => `${star.name}${star.brightness || ""}${star.mutagen ? `本命化${star.mutagen}` : ""}`).join("、") || "空宫"}；辅星${palace.minorStars.map((star) => star.name).join("、") || "无"}；杂曜${palace.adjectiveStars?.map((star) => star.name).join("、") || "未提供"}；紫微大限年龄${palace.decadal?.range?.join("–") || "未提供"}`),
+      chartDetails: `校正后真太阳时${solar.date} ${solar.time}（校正${solar.minutes}分钟）；农历${engine.lunarText}；四柱藏干${engine.hiddenStems.join(" / ")}；天干十神${engine.tenGods.join(" / ")}；起运${engine.start.solar}，出生后${engine.start.years}年${engine.start.months}月${engine.start.days}日${engine.start.hours}小时，${engine.direction}；大运年龄为引擎口径，不等于生日精确周岁；紫微五行局${chart.palaces !== fallbackPalaces ? chart.fiveElementsClass || "未提供" : "未就绪"}`,
+      annualSummary: Array.from({ length: 121 }, (_, index) => Number(solar.date.slice(0, 4)) + index).map((year) => {
+        const stage = engine.fortunes.find((item) => year >= item.startYear && year <= item.endYear);
+        return `${year}年${calculateAnnualPillar(year)}，出生后约${year - Number(solar.date.slice(0, 4))}年，${stage ? `${stage.pillar}运` : "未覆盖大运（不可推定）"}`;
+      }).join("；") + "。流年以该年立春至次年立春为界；交运年须结合起运日期核对，年份归运为引擎年度口径；未提供紫微流年四化。",
       pillars,
       ziweiSoul: chart.soul,
       ziweiBody: chart.body,
@@ -1209,7 +1216,7 @@ export default function Home() {
       favorable: analysis.favorable,
       avoid: analysis.avoid,
       strength: analysis.strength,
-      fortuneStages: fortunes.slice(0, 3).map((fortune) => `${fortune.pillar}运（${fortune.years}，${fortune.mode}）`),
+      fortuneStages: engine.fortunes.map((fortune) => `${fortune.pillar}运（${fortune.startYear}–${fortune.endYear}，引擎年龄${fortune.startAge}–${fortune.endAge}）`),
       gender: submitted.gender,
     });
     const fallback = "问询暂时无法完成，请稍后重试。";
