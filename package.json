@@ -10,6 +10,7 @@
     "build": "vinext build",
     "start": "vinext start",
     "test": "pnpm run build && node --test tests/*.test.mjs",
+    "typecheck": "node node_modules/typescript/bin/tsc --noEmit",
     "lint": "eslint . --ignore-pattern dist --ignore-pattern .next",
     "db:generate": "drizzle-kit generate"
   },

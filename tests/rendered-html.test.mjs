@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
+import { loadPageModel } from "./helpers/page-model.mjs";
 
 async function render() {
   const workerUrl = new URL("../dist/server/index.js", import.meta.url);
@@ -29,19 +30,10 @@ test("renders the complete Xuanji destiny experience", async () => {
   assert.match(html, /紫微命盘/);
   assert.match(html, /大运走势/);
   assert.match(html, /实际起运时刻/);
-  assert.match(html, /关键转折的依据与建议/);
+  assert.match(html, /点击一段大运/);
   assert.match(html, /判断结论/);
-  assert.match(html, /体用路径/);
+  assert.match(html, /行动参考/);
   assert.match(html, /需要节制/);
-  assert.match(html, /全盘关键转折/);
-  assert.match(html, /事业关键转折/);
-  assert.match(html, /感情关键转折/);
-  assert.match(html, /重点年份/);
-  assert.match(html, /以立春为界/);
-  assert.match(html, /运内重点年/);
-  assert.match(html, /命盘依据/);
-  assert.match(html, /现实核验/);
-  assert.match(html, /制定90天学习或项目计划/);
   assert.match(html, /element-metal/);
   assert.match(html, /心中有惑/);
   assert.match(html, /iztro\.min\.js/);
@@ -63,33 +55,16 @@ test("紫微命盘以宫位聚焦与宫间连线呈现三方和对宫职责", as
   assert.match(styles, /\.palace-relation-line/);
 });
 
-test("三类关键转折使用原局大运流年链，事业与感情均限成年", async () => {
-  const source = await readFile(new URL("../app/page.tsx", import.meta.url), "utf8");
-  const styles = await readFile(new URL("../app/globals.css", import.meta.url), "utf8");
-  assert.match(source, /calculateAnnualPillar\(year\)/);
-  assert.match(source, /overall: luckNatalTrigger && \(annualHitsNatal \|\| annualHitsLuck\)/);
-  assert.match(source, /career: adultCareerWindow && careerFortuneTheme && annualCareerTheme && \(annualHitsMonth \|\| \(luckHitsMonth && annualHitsLuck\)\)/);
-  assert.match(source, /relationship: adultRelationshipWindow && relationshipFortuneTheme && \(annualHitsDay \|\| spouseGods\.includes\(annualGod\)\)/);
-  assert.match(source, /紫微对应宫位用于判断变化更可能落在何处/);
-  assert.match(source, /adultRelationshipWindow/);
-  assert.match(source, /adultCareerWindow/);
-  assert.match(source, /annualHitsMonth/);
-  assert.match(source, /luckHitsMonth/);
-  assert.match(source, /age >= 18/);
-  assert.match(source, /spouseGods\.includes\(annualGod\)/);
-  assert.match(source, /\.slice\(0, 2\)/);
-  assert.match(source, /annualSignals/);
-  assert.match(source, /isCareerTurningPoint/);
-  assert.match(source, /isRelationshipTurningPoint/);
-  assert.match(source, /dayBranchClash/);
-  assert.match(source, /className="overall"/);
-  assert.match(source, /className="career"/);
-  assert.match(source, /className="relationship"/);
-  assert.match(styles, /em\.overall/);
-  assert.match(styles, /em\.career/);
-  assert.match(styles, /em\.relationship/);
-  assert.match(styles, /\.timeline \{[^}]*overflow: visible/);
-  assert.doesNotMatch(styles, /\.timeline \{[^}]*overflow-x:/);
+test("转折可在未来十年与全部岁运间切换，且不隐藏其他满足条件的年份", () => {
+  const m = loadPageModel();
+  const e = m.calculateBazi("1990-01-01","12:30","女");
+  const a = m.buildAnalysis(e.pillars,e);
+  const near = m.buildLuck(e.pillars,"女",a,{palaces:[]},e,new Date("2026-09-07"),10);
+  const all = m.buildLuck(e.pillars,"女",a,{palaces:[]},e,new Date("2026-09-07"),120);
+  const windows = luck => luck.fortunes.flatMap(f => Object.values(f.annualSignals).flatMap(s => s.windows));
+  assert.ok(windows(all).length > 0);
+  assert.ok(windows(near).every(w => w.year >= 2026 && w.year <= 2036));
+  assert.ok(windows(all).length >= windows(near).length);
 });
 
 test("判词避免夸张与恭维式话术", async () => {
@@ -108,7 +83,7 @@ test("默认使用女性示例并补足大运卡片信息", async () => {
   assert.match(source, /name: "林女士", gender: "女" as Gender/);
   assert.match(source, /fortuneGod/);
   assert.match(source, /dayRelation/);
-  assert.match(source, /className="turning-card-facts"/);
+  assert.match(source, /FortuneYearPanel/);
   assert.match(styles, /\.turning-card-facts/);
 });
 
@@ -150,7 +125,7 @@ test("每步大运按干支五行着色并以关键连线查看与八字的配�
   assert.match(source, /查看.*大运与八字的配合关系/);
   assert.match(source, /FortuneRelationMap/);
   assert.doesNotMatch(source, /只显示这步大运与出生八字之间真正需要看的关键连线/);
-  assert.match(source, /这步运的总判/);
+  assert.match(source, /本运依据/);
   assert.match(source, /出生八字/);
   assert.match(styles, /\.colored-pillar/);
   assert.match(styles, /\.fortune-relation-map/);
@@ -162,33 +137,29 @@ test("旺衰区域不显示过程性保留说明与资料完整度卡片", async
   const source = await readFile(new URL("../app/page.tsx", import.meta.url), "utf8");
   assert.doesNotMatch(source, /为什么保留程度为|排盘资料|完整度较高/);
   assert.match(source, /判断结论/);
-  assert.match(source, /体用路径/);
+  assert.match(source, /行动参考/);
 });
 
 test("性格与三类主题都提供简明结论和建议", async () => {
   const source = await readFile(new URL("../app/page.tsx", import.meta.url), "utf8");
   assert.match(source, /buildPersonalitySummary/);
   assert.match(source, /性格总判/);
-  assert.match(source, /label: "事业"/);
-  assert.match(source, /label: "财富"/);
-  assert.match(source, /label: "情感"/);
+  const { loadPageModel } = await import('./helpers/page-model.mjs');
+  const model = loadPageModel();
+  const readings = model.buildLifeReadings(model.buildAnalysis(['壬午','己酉','戊子','壬子']), {palaces:[]}, '女');
+  assert.deepEqual(Array.from(readings, item => item.label), ['事业','财富','情感']);
+  assert.ok(readings.every(item => item.headline && item.verdict && item.advice));
   assert.match(source, /\{item\.label\}总判/);
   assert.match(source, /综合判断/);
 });
 
-test("四柱、农历换算与起运使用同源精确历法引擎", async () => {
-  const page = await readFile(new URL("../app/page.tsx", import.meta.url), "utf8");
-  const engine = await readFile(new URL("../app/bazi-engine.ts", import.meta.url), "utf8");
-  assert.match(engine, /lunar-javascript/);
-  assert.match(engine, /eightChar\.setSect\(2\)/);
-  assert.match(engine, /eightChar\.getYun\(gender === "男" \? 1 : 0, 2\)/);
-  assert.match(engine, /Array\.isArray\(stems\) \? stems\.join\(""\) : stems/);
-  assert.match(engine, /solarFromLunarDate/);
-  assert.match(engine, /calculateAnnualPillar/);
-  assert.match(page, /calculateBazi\(adjusted\.date, adjusted\.time, form\.gender\)/);
-  assert.match(page, /起运使用与四柱同源的节气历法与子初换日规则/);
-  assert.doesNotMatch(page, /function nextPillar/);
-  assert.doesNotMatch(page, /function yearPillar/);
+test("历法引擎输出固定样例与连续十年交运边界", () => {
+  const m = loadPageModel();
+  assert.equal(m.solarFromLunarDate(2024,1,1,false),"2024-02-10");
+  assert.equal(m.calculateAnnualPillar(2026),"丙午");
+  const e = m.calculateBazi("1987-08-01","12:00","女");
+  assert.deepEqual(Array.from(e.pillars),["丁卯","丁未","壬午","丙午"]);
+  assert.equal(e.fortunes[0].endsAt,e.fortunes[1].startsAt);
 });
 
 test("页面不向用户显示英文规则分层标签", async () => {
@@ -200,7 +171,7 @@ test("问询框通过同源 AI 接口发送命盘上下文并显示状态", asyn
   const source = await readFile(new URL("../app/page.tsx", import.meta.url), "utf8");
   assert.match(source, /fetch\("\/api\/chat"/);
   assert.match(source, /isChatLoading/);
-  assert.match(source, /正在结合命盘分析，通常需要半分钟左右/);
+  assert.match(source, /aria-busy=\{isChatLoading\}/);
   assert.match(source, /buildChatContext/);
   assert.doesNotMatch(source, /规则引擎演示版/);
 });

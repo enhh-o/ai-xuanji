@@ -117,7 +117,7 @@ test("模型收到的扩展命盘保留末尾宫位、大运和流年", async ()
   const originalFetch = globalThis.fetch;
   let prompt;
   globalThis.fetch = async (_input, init) => {
-    prompt = JSON.parse(init.body).messages[0].content;
+    prompt = JSON.parse(init.body).messages.map(message => message.content).join("\n");
     return Response.json({ choices: [{ message: { content: "资料收到" } }] });
   };
   try {
@@ -135,4 +135,18 @@ test("模型收到的扩展命盘保留末尾宫位、大运和流年", async ()
 test("模型问询为复杂命盘解读保留一分钟等待时间", async () => {
   const source = await readFile(new URL("../worker/chat.ts", import.meta.url), "utf8");
   assert.match(source, /const MODEL_TIMEOUT_MS = 60_000/);
+});
+
+test('奇门范围与九宫资料经过后端进入模型资料消息',async()=>{
+ const worker=await loadWorker(),originalFetch=globalThis.fetch;
+ let messages;
+ globalThis.fetch=async(_input,init)=>{messages=JSON.parse(init.body).messages;return Response.json({choices:[{message:{content:'已接收奇门资料'}}]});};
+ try{
+   const response=await worker.fetch(jsonRequest({question:'解释选中宫位',chartContext:{...validContext,analysisSystem:'qimen',qimenSummary:'完整九宫资料；选中离九宫；末宫乾六宫'}}),{...minimalEnv,AI_API_KEY:'test-key',AI_CHAT_COMPLETIONS_URL:'https://model.example/chat/completions',AI_MODEL:'test-model'},testContext);
+   assert.equal(response.status,200);
+   const data=JSON.parse(messages[1].content.split('\n').slice(1).join('\n'));
+   assert.equal(data.analysisSystem,'qimen');assert.match(data.qimenSummary,/末宫乾六宫/);
+   assert.match(messages[0].content,/出生局不是事件局/);
+   assert.doesNotMatch(messages[0].content,/选中离九宫/);
+ }finally{globalThis.fetch=originalFetch;}
 });

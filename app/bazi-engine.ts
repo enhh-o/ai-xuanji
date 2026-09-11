@@ -6,9 +6,12 @@ export type EngineFortune = {
   endYear: number;
   startAge: number;
   endAge: number;
+  startsAt: string;
+  endsAt: string;
 };
 
 export type EngineBazi = {
+  birthDate: string;
   pillars: [string, string, string, string];
   lunarText: string;
   hiddenStems: [string, string, string, string];
@@ -59,18 +62,21 @@ export function calculateBazi(date: string, time: string, gender: "男" | "女")
   const yun = eightChar.getYun(gender === "男" ? 1 : 0, 2);
   const startSolar = yun.getStartSolar();
   const pillars = [eightChar.getYear(), eightChar.getMonth(), eightChar.getDay(), eightChar.getTime()] as [string, string, string, string];
-  const fortunes = yun.getDaYun().filter((item: any) => item.getGanZhi()).map((item: any) => ({
+  const fortunes = yun.getDaYun().filter((item: any) => item.getGanZhi()).map((item: any, index: number) => ({
     pillar: item.getGanZhi(),
     startYear: item.getStartYear(),
     endYear: item.getEndYear(),
     startAge: item.getStartAge(),
     endAge: item.getEndAge(),
+    startsAt: startSolar.nextYear(index * 10).toYmdHms(),
+    endsAt: startSolar.nextYear((index + 1) * 10).toYmdHms(),
   }));
   const yearStem = pillars[0][0];
   const yangYear = "甲丙戊庚壬".includes(yearStem);
   const forward = (yangYear && gender === "男") || (!yangYear && gender === "女");
 
   return {
+    birthDate: date,
     pillars,
     lunarText: lunarText(lunar),
     hiddenStems: [eightChar.getYearHideGan(), eightChar.getMonthHideGan(), eightChar.getDayHideGan(), eightChar.getTimeHideGan()].map((stems: string[] | string) => Array.isArray(stems) ? stems.join("") : stems) as [string, string, string, string],
